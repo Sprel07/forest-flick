@@ -1,5 +1,5 @@
 // server.js
-// Run locally:
+// Run:
 //   npm i ws express
 //   node server.js
 // Open:
@@ -8,14 +8,14 @@
 // Multiplayer model:
 // - Server is authoritative for turns and state
 // - Clients send inputs only when it is their turn
-// - Server simulates physics for deterministic gameplay
+// - Server simulates physics and sends snapshots
 
 const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 
 const app = express();
-app.use(express.static(".")); // serves index.html and assets in repo root
+app.use(express.static("."));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -42,8 +42,16 @@ function getRoom(code) {
 }
 
 function roomPlayerIds(room) {
-  // room.clients is Map(ws -> pid)
+  // room.clients is Map(ws -> pid), so values() are pids
   return Array.from(room.clients.values());
+}
+
+function sanitizeName(s) {
+  const raw = String(s || "").trim();
+  if (!raw) return "";
+  // keep it simple and safe
+  const cleaned = raw.replace(/[^\w\s\-'.]/g, "").trim();
+  return cleaned.slice(0, 18);
 }
 
 function makeRoom(code) {
@@ -53,19 +61,17 @@ function makeRoom(code) {
     clients: new Map(), // ws -> pid
     hostId: null,
 
-    // lobby
     lobby: {
       mode: "race", // "race" | "boss"
       started: false,
       picks: {}, // pid -> characterId
       ready: {}, // pid -> bool
+      names: {}, // pid -> displayName
       maxPlayers: 4,
     },
 
-    // game state
-    game: null, // built on start
+    game: null,
     lastTick: nowMs(),
-    accum: 0,
     lastSnap: 0,
   };
 }
@@ -85,7 +91,7 @@ function makeGame(mode, playerIds, picks) {
     turnIndex: 0,
     turnOrder: [...playerIds],
     turnState: "aim", // aim | resolving
-    turnMsLeft: 25000, // 25s per turn, resets each turn
+    turnMsLeft: 25000,
     activeId: playerIds[0],
 
     // world
@@ -93,6 +99,7 @@ function makeGame(mode, playerIds, picks) {
     H: 540,
     bounds: { x: 20, y: 20, w: 920, h: 500 },
 
+    // stage
     levelId: "cocorite_cove",
     finish: null,
     walls: [],
@@ -123,20 +130,29 @@ function makeGame(mode, playerIds, picks) {
     game.players[pid] = makePlayer(pid, charId, 120, startY + (i - playerIds.length / 2) * 44);
   }
 
-  // build first stage
   if (mode === "race") buildRaceLevel(game, game.levelId);
   else buildBossRound(game);
 
-  // hint for first stage
   if (mode === "race") game.hint = "Race to the finish. One flick per turn. First to touch wins.";
   return game;
 }
 
+function hashToHueInt(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h) + str.charCodeAt(i);
+  h = Math.abs(h | 0);
+  return h % 360;
+}
+
 function makePlayer(pid, charId, x, y) {
+  const hue = hashToHueInt(pid);
   const p = {
     id: pid,
     charId,
     x, y, vx: 0, vy: 0, r: 18,
+
+    // visuals: client can use hue for tint
+    hue,
 
     // per round stats
     firstLaunchAvailable: true,
@@ -149,6 +165,11 @@ function makePlayer(pid, charId, x, y) {
     dashUsedThisTurn: false,
     dashStrikeWindow: 0,
 
+    // safety recovery
+    lastSafeX: x,
+    lastSafeY: y,
+    oobT: 0,
+
     // scoring
     score: 0,
     coins: 0,
@@ -159,6 +180,7 @@ function makePlayer(pid, charId, x, y) {
     friction: 0.985,
   };
 
+  // traits
   if (charId === "frog") p.bounceKeep = 0.90;
   else p.bounceKeep = 0.78;
 
@@ -173,9 +195,15 @@ function resetRoundPerks(game) {
     p.finished = false;
     p.dashUsedThisTurn = false;
     p.dashStrikeWindow = 0;
+    p.canDashThisTurn = false;
 
     p.dashCharges = (p.charId === "hummingbird") ? 1 : 0;
     p.shield = (p.charId === "manicou");
+
+    // reset safety anchors
+    p.lastSafeX = p.x;
+    p.lastSafeY = p.y;
+    p.oobT = 0;
   }
 }
 
@@ -189,6 +217,12 @@ function baseBounds(game) {
   ];
 }
 
+// Maze style race maps
+function buildMazeWalls(game, layoutRects) {
+  game.walls = baseBounds(game);
+  for (const r of layoutRects) game.walls.push(r);
+}
+
 function buildRaceLevel(game, levelId) {
   game.levelId = levelId;
   game.boss = null;
@@ -197,16 +231,18 @@ function buildRaceLevel(game, levelId) {
   game.turnState = "aim";
   game.turnMsLeft = 25000;
 
-  game.walls = baseBounds(game);
+  game.finish = null;
   game.pads = [];
   game.traps = [];
   game.coins = [];
   game.items = [];
 
   if (levelId === "cocorite_cove") {
-    game.walls.push({ x: 220, y: 130, w: 260, h: 24 });
-    game.walls.push({ x: 300, y: 320, w: 330, h: 24 });
-    game.walls.push({ x: 610, y: 170, w: 24, h: 220 });
+    buildMazeWalls(game, [
+      { x: 220, y: 130, w: 260, h: 24 },
+      { x: 300, y: 320, w: 330, h: 24 },
+      { x: 610, y: 170, w: 24, h: 220 },
+    ]);
 
     game.finish = { x: game.W - 170, y: 90, w: 110, h: 80 };
 
@@ -224,12 +260,14 @@ function buildRaceLevel(game, levelId) {
       { type: "magnet", x: 760, y: 430, r: 12, takenBy: null },
     ];
   } else if (levelId === "maracas_bounce") {
-    game.walls.push({ x: 230, y: 110, w: 440, h: 24 });
-    game.walls.push({ x: 230, y: 386, w: 440, h: 24 });
-    game.walls.push({ x: 230, y: 134, w: 24, h: 252 });
-    game.walls.push({ x: 646, y: 134, w: 24, h: 252 });
-    game.walls.push({ x: 360, y: 240, w: 180, h: 20 });
-    game.walls.push({ x: 440, y: 190, w: 20, h: 140 });
+    buildMazeWalls(game, [
+      { x: 230, y: 110, w: 440, h: 24 },
+      { x: 230, y: 386, w: 440, h: 24 },
+      { x: 230, y: 134, w: 24, h: 252 },
+      { x: 646, y: 134, w: 24, h: 252 },
+      { x: 360, y: 240, w: 180, h: 20 },
+      { x: 440, y: 190, w: 20, h: 140 },
+    ]);
 
     game.finish = { x: game.W - 170, y: 70, w: 110, h: 80 };
 
@@ -246,111 +284,86 @@ function buildRaceLevel(game, levelId) {
       { type: "magnet", x: 700, y: 140, r: 12, takenBy: null },
       { type: "dash", x: 300, y: 430, r: 12, takenBy: null },
     ];
+  } else if (levelId === "pitch_lake_labyrinth") {
+    // Longer complex maze inspired by your reference image (thick corridors)
+    const t = 34; // wall thickness
+    buildMazeWalls(game, [
+      // Big maze blocks
+      { x: 120, y: 80, w: 260, h: t },
+      { x: 120, y: 80, w: t, h: 360 },
+      { x: 120, y: 406, w: 300, h: t },
+
+      { x: 260, y: 220, w: 240, h: t },
+      { x: 460, y: 120, w: t, h: 240 },
+      { x: 360, y: 320, w: 260, h: t },
+
+      { x: 620, y: 120, w: 220, h: t },
+      { x: 820, y: 120, w: t, h: 300 },
+      { x: 520, y: 406, w: 334, h: t },
+
+      // Extra internal blockers for routes
+      { x: 210, y: 160, w: 200, h: t },
+      { x: 210, y: 160, w: t, h: 160 },
+      { x: 310, y: 300, w: t, h: 140 },
+
+      { x: 560, y: 200, w: t, h: 160 },
+      { x: 560, y: 200, w: 160, h: t },
+
+      { x: 700, y: 260, w: 180, h: t },
+      { x: 700, y: 260, w: t, h: 130 },
+    ]);
+
+    game.finish = { x: game.W - 160, y: 60, w: 110, h: 90 };
+
+    game.coins = [
+      { x: 190, y: 110 }, { x: 190, y: 460 },
+      { x: 330, y: 200 }, { x: 410, y: 460 },
+      { x: 540, y: 150 }, { x: 540, y: 460 },
+      { x: 730, y: 180 }, { x: 730, y: 460 },
+      { x: 860, y: 320 }
+    ].map(c => ({ ...c, r: 10, takenBy: null }));
+
+    game.traps = [
+      { x: 350, y: 250, r: 14 },
+      { x: 640, y: 350, r: 14 },
+      { x: 780, y: 210, r: 14 }
+    ];
+
+    game.pads = [
+      { x: 150, y: 250, w: 130, h: 16 },
+      { x: 520, y: 95, w: 150, h: 16 },
+      { x: 710, y: 440, w: 160, h: 16 }
+    ];
+
+    game.items = [
+      { type: "dash", x: 240, y: 455, r: 12, takenBy: null },
+      { type: "shield", x: 410, y: 150, r: 12, takenBy: null },
+      { type: "magnet", x: 850, y: 450, r: 12, takenBy: null },
+      { type: "dash", x: 690, y: 150, r: 12, takenBy: null },
+    ];
   } else {
+    // fallback
+    buildMazeWalls(game, []);
     game.finish = { x: game.W - 170, y: 90, w: 110, h: 80 };
   }
 
+  // reset players positions and perks
   const ids = game.turnOrder;
   const startY = game.H / 2;
   for (let i = 0; i < ids.length; i++) {
     const p = game.players[ids[i]];
-    p.x = 120;
+    if (!p) continue;
+    p.x = 90;
     p.y = startY + (i - ids.length / 2) * 44;
     p.vx = 0; p.vy = 0;
     p.finished = false;
+    p.lastSafeX = p.x;
+    p.lastSafeY = p.y;
+    p.oobT = 0;
   }
   resetRoundPerks(game);
 
   game.hint = "Race to the finish. One flick per turn. First to touch wins.";
-}
-
-const BOSS_DEFS = [
-  { id: "moko_boulder", name: "Moko Boulder Idol", hp: 10, rules: ["BOULDER_ONLY"], hint: "Only the boulder can damage it. Flick yourself into the boulder to launch it." },
-  { id: "armored_crab", name: "Armored Crab King", hp: 12, rules: ["DASH_ONLY"], hint: "Only dash strikes hurt it. Use dash during your movement to ram it." },
-  { id: "spirit_owl", name: "Spirit Owl Warden", hp: 10, rules: ["PARRY_ONLY"], hint: "Parry the shockwave. Dash through the expanding ring at the right time." },
-  { id: "reef_golem", name: "Reef Golem", hp: 14, rules: ["WEAKSPOT_CYCLE"], hint: "Hit the glowing weak spot. It moves every few seconds." },
-  { id: "storm_manta", name: "Storm Manta", hp: 14, rules: ["RICOCHET_REQUIRED", "WEAKSPOT_CYCLE"], hint: "Boss only takes real damage after you bounce off a wall, then hit the weak glow." },
-  { id: "totem_jaguar", name: "Totem Jaguar", hp: 16, rules: ["STUN_THEN_PUNISH"], hint: "Stun it first. Hit two arena objects into it to drop its shield, then strike fast." },
-];
-
-function pickBossByIndex(i) {
-  return BOSS_DEFS[i % BOSS_DEFS.length];
-}
-
-function buildBossRound(game) {
-  game.finish = null;
-  game.walls = baseBounds(game);
-  game.pads = [];
-  game.traps = [];
-  game.coins = [];
-  game.items = [];
-  game.phase = "play";
-  game.winnerId = null;
-  game.turnState = "aim";
-  game.turnMsLeft = 25000;
-
-  game.walls.push({ x: 220, y: 90, w: 24, h: 340 });
-  game.walls.push({ x: 340, y: 150, w: 260, h: 24 });
-  game.walls.push({ x: 340, y: 346, w: 260, h: 24 });
-  game.walls.push({ x: 600, y: 150, w: 24, h: 220 });
-
-  game.pads = [{ x: 120, y: 250, w: 110, h: 16 }, { x: 720, y: 250, w: 120, h: 16 }];
-
-  game.coins = [
-    { x: 170, y: 110 }, { x: 170, y: 410 }, { x: 520, y: 110 },
-    { x: 520, y: 410 }, { x: 780, y: 150 }, { x: 780, y: 370 }
-  ].map(c => ({ ...c, r: 10, takenBy: null }));
-
-  const bdef = pickBossByIndex(game.bossIndex);
-  game.bossIndex++;
-
-  game.boss = {
-    id: bdef.id,
-    name: bdef.name,
-    rules: [...bdef.rules],
-    hp: bdef.hp,
-    hpMax: bdef.hp,
-    x: game.W * 0.72,
-    y: game.H * 0.50,
-    r: 44,
-    t: 0,
-
-    weakAngle: 0,
-    weakArc: Math.PI / 3,
-    weakCycleS: 1.8,
-
-    ring: { active: false, r: 0, spd: 220, cd: 1.2, x: 0, y: 0 },
-
-    stunnedT: 0,
-    shielded: (bdef.rules.includes("STUN_THEN_PUNISH")),
-    stunHits: 0,
-  };
-
-  game.hint = bdef.hint;
-  game.toast = `${bdef.name} appeared. ${bdef.hint}`;
-  game.shake = 0;
-  game.shakeT = 0;
-
-  if (game.boss.rules.includes("DASH_ONLY") || game.boss.rules.includes("PARRY_ONLY")) {
-    game.items.push({ type: "dash", x: 320, y: 110, r: 12, takenBy: null });
-    game.items.push({ type: "dash", x: 320, y: 410, r: 12, takenBy: null });
-  }
-  if (game.boss.rules.includes("BOULDER_ONLY") || game.boss.rules.includes("STUN_THEN_PUNISH")) {
-    game.items.push({ type: "boulder", x: game.W * 0.40, y: game.H * 0.50, r: 22, vx: 0, vy: 0 });
-  }
-  game.items.push({ type: "shield", x: 320, y: 250, r: 12, takenBy: null });
-  game.items.push({ type: "magnet", x: 780, y: 260, r: 12, takenBy: null });
-
-  const ids = game.turnOrder;
-  const startY = game.H / 2;
-  for (let i = 0; i < ids.length; i++) {
-    const p = game.players[ids[i]];
-    p.x = 120;
-    p.y = startY + (i - ids.length / 2) * 44;
-    p.vx = 0; p.vy = 0;
-    p.finished = false;
-  }
-  resetRoundPerks(game);
 }
 
 function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
@@ -385,6 +398,7 @@ function resolveCircleRect(p, w) {
     p.vx *= p.bounceKeep;
     p.vy *= p.bounceKeep;
 
+    // extra damping to stop wall wobble quicker
     p.vx *= 0.90;
     p.vy *= 0.90;
   }
@@ -396,13 +410,6 @@ function clampSpeed(p, maxSp) {
     const s = maxSp / sp;
     p.vx *= s; p.vy *= s;
   }
-}
-
-function angleDiff(a, b) {
-  let d = a - b;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return d;
 }
 
 function isStopped(p) {
@@ -431,18 +438,69 @@ function applyMagnet(game, p, dt) {
   }
 }
 
+// -------------------------
+// Bosses
+// -------------------------
+
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+// Replaced the lame boulder boss with a better object based boss:
+// "Stone Sentinel" can only be damaged by arena objects (rolling stones) you knock into it.
+// Feels more like pinball and less like "wait for boulder".
+const BOSS_DEFS = [
+  {
+    id: "stone_sentinel",
+    name: "Stone Sentinel",
+    hp: 14,
+    rules: ["OBJECT_ONLY"],
+    hint: "Only arena stones can hurt it. Flick yourself into stones to launch them into the boss."
+  },
+  {
+    id: "armored_crab",
+    name: "Armored Crab King",
+    hp: 12,
+    rules: ["DASH_ONLY"],
+    hint: "Only dash strikes hurt it. Dash to ram it while moving."
+  },
+  {
+    id: "spirit_owl",
+    name: "Spirit Owl Warden",
+    hp: 10,
+    rules: ["PARRY_ONLY"],
+    hint: "Parry the shockwave. Dash through the expanding ring at the right time."
+  },
+  {
+    id: "reef_golem",
+    name: "Reef Golem",
+    hp: 14,
+    rules: ["WEAKSPOT_CYCLE"],
+    hint: "Hit the glowing weak spot. It moves every few seconds."
+  },
+  {
+    id: "storm_manta",
+    name: "Storm Manta",
+    hp: 14,
+    rules: ["RICOCHET_REQUIRED", "WEAKSPOT_CYCLE"],
+    hint: "Bounce off a wall, then hit the weak glow to deal real damage."
+  },
+];
+
+function pickBossByIndex(i) {
+  return BOSS_DEFS[i % BOSS_DEFS.length];
+}
+
 function bossTakeDamage(game, amount, source, hitAngle = null) {
   const boss = game.boss;
   if (!boss) return false;
 
-  if (boss.rules.includes("BOULDER_ONLY") && source !== "BOULDER") return false;
+  if (boss.rules.includes("OBJECT_ONLY") && source !== "OBJECT") return false;
   if (boss.rules.includes("DASH_ONLY") && source !== "DASH") return false;
   if (boss.rules.includes("PARRY_ONLY") && source !== "PARRY") return false;
-
-  if (boss.rules.includes("STUN_THEN_PUNISH")) {
-    if (boss.shielded) return false;
-  }
-
   if (boss.rules.includes("RICOCHET_REQUIRED") && source !== "RICOCHET_OK") return false;
 
   if (boss.rules.includes("WEAKSPOT_CYCLE")) {
@@ -458,12 +516,100 @@ function bossTakeDamage(game, amount, source, hitAngle = null) {
   return true;
 }
 
+function buildBossRound(game) {
+  game.finish = null;
+  game.walls = baseBounds(game);
+  game.pads = [];
+  game.traps = [];
+  game.coins = [];
+  game.items = [];
+  game.phase = "play";
+  game.winnerId = null;
+  game.turnState = "aim";
+  game.turnMsLeft = 25000;
+
+  // arena structure
+  game.walls.push({ x: 220, y: 90, w: 24, h: 340 });
+  game.walls.push({ x: 340, y: 150, w: 260, h: 24 });
+  game.walls.push({ x: 340, y: 346, w: 260, h: 24 });
+  game.walls.push({ x: 600, y: 150, w: 24, h: 220 });
+
+  game.pads = [
+    { x: 120, y: 250, w: 110, h: 16 },
+    { x: 720, y: 250, w: 120, h: 16 }
+  ];
+
+  game.coins = [
+    { x: 170, y: 110 }, { x: 170, y: 410 }, { x: 520, y: 110 },
+    { x: 520, y: 410 }, { x: 780, y: 150 }, { x: 780, y: 370 }
+  ].map(c => ({ ...c, r: 10, takenBy: null }));
+
+  const bdef = pickBossByIndex(game.bossIndex);
+  game.bossIndex++;
+
+  game.boss = {
+    id: bdef.id,
+    name: bdef.name,
+    rules: [...bdef.rules],
+    hp: bdef.hp,
+    hpMax: bdef.hp,
+    x: game.W * 0.72,
+    y: game.H * 0.50,
+    r: 44,
+    t: 0,
+
+    weakAngle: 0,
+    weakArc: Math.PI / 3,
+    weakCycleS: 1.8,
+
+    ring: { active: false, r: 0, spd: 220, cd: 1.2, x: 0, y: 0 },
+  };
+
+  game.hint = bdef.hint;
+  game.toast = `${bdef.name} appeared. ${bdef.hint}`;
+  game.shake = 0;
+  game.shakeT = 0;
+
+  // items tuned per boss
+  if (game.boss.rules.includes("DASH_ONLY") || game.boss.rules.includes("PARRY_ONLY")) {
+    game.items.push({ type: "dash", x: 320, y: 110, r: 12, takenBy: null });
+    game.items.push({ type: "dash", x: 320, y: 410, r: 12, takenBy: null });
+  }
+
+  // OBJECT_ONLY boss gets multiple stones to knock around
+  if (game.boss.rules.includes("OBJECT_ONLY")) {
+    game.items.push({ type: "stone", x: game.W * 0.42, y: game.H * 0.38, r: 22, vx: 0, vy: 0 });
+    game.items.push({ type: "stone", x: game.W * 0.42, y: game.H * 0.62, r: 22, vx: 0, vy: 0 });
+    game.items.push({ type: "stone", x: game.W * 0.55, y: game.H * 0.50, r: 18, vx: 0, vy: 0 });
+  }
+
+  game.items.push({ type: "shield", x: 320, y: 250, r: 12, takenBy: null });
+  game.items.push({ type: "magnet", x: 780, y: 260, r: 12, takenBy: null });
+
+  // reset players
+  const ids = game.turnOrder;
+  const startY = game.H / 2;
+  for (let i = 0; i < ids.length; i++) {
+    const p = game.players[ids[i]];
+    if (!p) continue;
+    p.x = 120;
+    p.y = startY + (i - ids.length / 2) * 44;
+    p.vx = 0; p.vy = 0;
+    p.finished = false;
+    p.lastSafeX = p.x;
+    p.lastSafeY = p.y;
+    p.oobT = 0;
+  }
+  resetRoundPerks(game);
+}
+
 function updateBoss(game, dt) {
   const boss = game.boss;
   if (!boss) return;
 
   boss.t += dt;
 
+  // drift
   const tx = game.W * 0.72 + Math.sin(boss.t * 1.1) * 70;
   const ty = game.H * 0.50 + Math.cos(boss.t * 0.9) * 70;
   boss.x += (tx - boss.x) * 0.9 * dt;
@@ -472,14 +618,6 @@ function updateBoss(game, dt) {
   if (boss.rules.includes("WEAKSPOT_CYCLE")) {
     const phase = Math.floor(boss.t / boss.weakCycleS) % 4;
     boss.weakAngle = phase * (Math.PI / 2);
-  }
-
-  if (boss.rules.includes("STUN_THEN_PUNISH")) {
-    if (!boss.shielded && boss.stunnedT > 0) boss.stunnedT = Math.max(0, boss.stunnedT - dt);
-    if (boss.stunnedT <= 0 && !boss.shielded) {
-      boss.shielded = true;
-      boss.stunHits = 0;
-    }
   }
 
   if (boss.rules.includes("PARRY_ONLY") && boss.ring) {
@@ -499,214 +637,38 @@ function updateBoss(game, dt) {
   }
 }
 
-function updateBoulder(game, dt) {
-  const b = game.items.find(it => it.type === "boulder");
-  if (!b) return;
+function updateStones(game, dt) {
+  const stones = game.items.filter(it => it.type === "stone");
+  if (!stones.length) return;
 
-  b.x += (b.vx || 0) * dt;
-  b.y += (b.vy || 0) * dt;
-  b.vx *= 0.992;
-  b.vy *= 0.992;
+  for (const s of stones) {
+    s.x += (s.vx || 0) * dt;
+    s.y += (s.vy || 0) * dt;
+    s.vx *= 0.992;
+    s.vy *= 0.992;
 
-  const tmp = { x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: b.r, bounceKeep: 0.92 };
-  for (const w of game.walls) {
-    if (circleRectCollide(tmp.x, tmp.y, tmp.r, w.x, w.y, w.w, w.h)) resolveCircleRect(tmp, w);
-  }
-  b.x = tmp.x; b.y = tmp.y; b.vx = tmp.vx; b.vy = tmp.vy;
+    const tmp = { x: s.x, y: s.y, vx: s.vx, vy: s.vy, r: s.r, bounceKeep: 0.92 };
+    for (const w of game.walls) {
+      if (circleRectCollide(tmp.x, tmp.y, tmp.r, w.x, w.y, w.w, w.h)) resolveCircleRect(tmp, w);
+    }
+    s.x = tmp.x; s.y = tmp.y; s.vx = tmp.vx; s.vy = tmp.vy;
 
-  if (game.boss) {
-    const dx = b.x - game.boss.x;
-    const dy = b.y - game.boss.y;
-    const d = Math.hypot(dx, dy);
-    if (d <= b.r + game.boss.r) {
-      const sp = Math.hypot(b.vx, b.vy);
-      if (sp > 60) {
-        bossTakeDamage(game, 1, "BOULDER", Math.atan2(dy, dx));
-        b.vx *= 0.55; b.vy *= 0.55;
-        game.shake = Math.max(game.shake, 16);
-        game.shakeT = Math.max(game.shakeT, 0.20);
-        game.toast = "Boulder smash!";
+    if (game.boss) {
+      const dx = s.x - game.boss.x;
+      const dy = s.y - game.boss.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= s.r + game.boss.r) {
+        const sp = Math.hypot(s.vx, s.vy);
+        if (sp > 70) {
+          bossTakeDamage(game, 1, "OBJECT", Math.atan2(dy, dx));
+          s.vx *= 0.55; s.vy *= 0.55;
+          game.shake = Math.max(game.shake, 16);
+          game.shakeT = Math.max(game.shakeT, 0.20);
+          game.toast = "Stone smash!";
+        }
       }
     }
   }
-}
-
-function stepGame(game, dt) {
-  if (!game) return;
-
-  if (game.shakeT > 0) game.shakeT = Math.max(0, game.shakeT - dt);
-  if (game.shakeT <= 0) game.shake *= 0.90;
-
-  game.turnMsLeft -= dt * 1000;
-  if (game.turnMsLeft <= 0 && game.phase === "play") {
-    endTurn(game, "Time up");
-  }
-
-  if (game.mode === "boss") {
-    updateBoss(game, dt);
-    updateBoulder(game, dt);
-  }
-
-  if (game.turnState === "resolving" && game.phase === "play") {
-    for (const pid of Object.keys(game.players)) {
-      const pl = game.players[pid];
-
-      pl.magnetT = Math.max(0, pl.magnetT - dt);
-      if (pl.dashStrikeWindow > 0) pl.dashStrikeWindow = Math.max(0, pl.dashStrikeWindow - dt);
-
-      applyMagnet(game, pl, dt);
-
-      pl.x += pl.vx * dt;
-      pl.y += pl.vy * dt;
-      pl.vx *= Math.pow(pl.friction, dt * 60);
-      pl.vy *= Math.pow(pl.friction, dt * 60);
-
-      if (Math.abs(pl.vx) < 2) pl.vx = 0;
-      if (Math.abs(pl.vy) < 2) pl.vy = 0;
-
-      clampSpeed(pl, 1500);
-
-      for (const w of game.walls) {
-        if (circleRectCollide(pl.x, pl.y, pl.r, w.x, w.y, w.w, w.h)) resolveCircleRect(pl, w);
-      }
-
-      for (const pad of game.pads) {
-        if (circleRectCollide(pl.x, pl.y, pl.r, pad.x, pad.y, pad.w, pad.h)) applyPadBoost(pl);
-      }
-
-      for (const c of game.coins) {
-        if (c.takenBy) continue;
-        const dx = pl.x - c.x, dy = pl.y - c.y;
-        if (Math.hypot(dx, dy) <= pl.r + c.r) {
-          c.takenBy = pid;
-          pl.coins += 10;
-          pl.score += 25;
-        }
-      }
-
-      for (const it of game.items) {
-        if (it.takenBy) continue;
-        if (it.type === "boulder") continue;
-        const dx = pl.x - it.x, dy = pl.y - it.y;
-        if (Math.hypot(dx, dy) <= pl.r + it.r) {
-          it.takenBy = pid;
-          if (it.type === "dash") pl.dashCharges += 1;
-          if (it.type === "shield") pl.shield = true;
-          if (it.type === "magnet") pl.magnetT = 6.0;
-        }
-      }
-
-      for (const t of game.traps) {
-        const dx = pl.x - t.x, dy = pl.y - t.y;
-        if (Math.hypot(dx, dy) <= pl.r + t.r) {
-          if (pl.shield) pl.shield = false;
-          else {
-            pl.x = 120;
-            pl.y = game.H / 2;
-            pl.vx = 0; pl.vy = 0;
-          }
-        }
-      }
-
-      const b = game.items.find(x => x.type === "boulder");
-      if (b) {
-        const dx = b.x - pl.x, dy = b.y - pl.y;
-        const d = Math.hypot(dx, dy);
-        if (d <= b.r + pl.r) {
-          const sp = Math.max(80, Math.min(360, Math.hypot(pl.vx, pl.vy)));
-          const ux = dx / (d || 1), uy = dy / (d || 1);
-          b.vx += ux * sp * 0.85;
-          b.vy += uy * sp * 0.85;
-          game.shake = Math.max(game.shake, 6);
-          game.shakeT = Math.max(game.shakeT, 0.10);
-        }
-      }
-
-      if (game.boss) {
-        const boss = game.boss;
-        const dx = pl.x - boss.x;
-        const dy = pl.y - boss.y;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist <= pl.r + boss.r) {
-          const ux = dx / (dist || 1), uy = dy / (dist || 1);
-          pl.vx += ux * 220;
-          pl.vy += uy * 220;
-
-          if (pl.dashStrikeWindow > 0) {
-            let source = "DASH";
-            if (boss.rules.includes("RICOCHET_REQUIRED")) source = "RICOCHET_OK";
-            const ang = Math.atan2(dy, dx);
-            bossTakeDamage(game, 1, source, ang);
-            pl.dashStrikeWindow = 0;
-          } else {
-            if (!boss.rules.includes("BOULDER_ONLY") &&
-                !boss.rules.includes("DASH_ONLY") &&
-                !boss.rules.includes("PARRY_ONLY") &&
-                !boss.rules.includes("RICOCHET_REQUIRED")) {
-              const ang = Math.atan2(dy, dx);
-              bossTakeDamage(game, 0.25, "BODY", ang);
-            }
-          }
-        }
-
-        if (boss.rules.includes("PARRY_ONLY") && boss.ring && boss.ring.active) {
-          const rx = pl.x - boss.ring.x, ry = pl.y - boss.ring.y;
-          const d = Math.hypot(rx, ry);
-          const hitRing = Math.abs(d - boss.ring.r) < 10;
-          if (hitRing && pl.dashStrikeWindow <= 0) {
-            if (pl.shield) pl.shield = false;
-            else {
-              pl.x = 120;
-              pl.y = game.H / 2;
-              pl.vx = 0; pl.vy = 0;
-            }
-          }
-        }
-      }
-    }
-
-    const stopped = Object.values(game.players).every(pl => isStopped(pl));
-    if (stopped) endTurn(game, null);
-  }
-
-  if (game.mode === "race" && game.finish && game.phase === "play") {
-    for (const pid of Object.keys(game.players)) {
-      const p = game.players[pid];
-      if (p.finished) continue;
-      if (circleRectCollide(p.x, p.y, p.r, game.finish.x, game.finish.y, game.finish.w, game.finish.h)) {
-        p.finished = true;
-        game.winnerId = pid;
-        game.phase = "round_end";
-        game.toast = `Winner: ${pid}`;
-        p.score += 100;
-        p.coins += 20;
-      }
-    }
-  }
-
-  if (game.mode === "boss" && game.boss && game.phase === "play") {
-    if (game.boss.hp <= 0) {
-      game.phase = "round_end";
-      game.toast = "Boss defeated!";
-      for (const pid of Object.keys(game.players)) {
-        game.players[pid].coins += 40;
-        game.players[pid].score += 80;
-      }
-    }
-  }
-}
-
-function endTurn(game, reason) {
-  if (game.phase !== "play") return;
-
-  game.turnState = "aim";
-  game.turnMsLeft = 25000;
-
-  game.turnIndex = (game.turnIndex + 1) % game.turnOrder.length;
-  game.activeId = game.turnOrder[game.turnIndex];
-
-  if (reason) game.toast = reason;
 }
 
 function startResolving(game) {
@@ -761,13 +723,25 @@ function applyDash(game, pid) {
     if (within) {
       bossTakeDamage(game, 1, "PARRY", Math.atan2(p.y - boss.y, p.x - boss.x));
       boss.ring.active = false;
-      game.toast = "Parry! Reflected damage!";
+      game.toast = "Parry!";
       game.shake = Math.max(game.shake, 16);
       game.shakeT = Math.max(game.shakeT, 0.22);
     }
   }
 
   return true;
+}
+
+function endTurn(game, reason) {
+  if (game.phase !== "play") return;
+
+  game.turnState = "aim";
+  game.turnMsLeft = 25000;
+
+  game.turnIndex = (game.turnIndex + 1) % game.turnOrder.length;
+  game.activeId = game.turnOrder[game.turnIndex];
+
+  if (reason) game.toast = reason;
 }
 
 function nextRound(game) {
@@ -783,16 +757,264 @@ function nextRound(game) {
   game.turnMsLeft = 25000;
 
   if (game.mode === "race") {
-    const next = (game.levelId === "cocorite_cove") ? "maracas_bounce" : "cocorite_cove";
+    // cycle 3 maps now
+    const cycle = ["cocorite_cove", "maracas_bounce", "pitch_lake_labyrinth"];
+    const idx = cycle.indexOf(game.levelId);
+    const next = cycle[(idx + 1) % cycle.length];
     buildRaceLevel(game, next);
   } else {
     buildBossRound(game);
   }
 }
 
+function recoverIfOutOfBounds(game, p, dt) {
+  const b = game.bounds;
+  const margin = 140;
+  const oob =
+    (p.x < b.x - margin) || (p.x > b.x + b.w + margin) ||
+    (p.y < b.y - margin) || (p.y > b.y + b.h + margin);
+
+  if (!oob) {
+    p.oobT = 0;
+    // update safe anchor if inside playable area
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+      // do not spam safe updates while flying fast
+      const sp = Math.hypot(p.vx, p.vy);
+      if (sp < 900) {
+        p.lastSafeX = p.x;
+        p.lastSafeY = p.y;
+      }
+    }
+    return;
+  }
+
+  p.oobT += dt;
+  if (p.oobT > 0.45) {
+    // snap back to last safe
+    p.x = p.lastSafeX || 120;
+    p.y = p.lastSafeY || (game.H / 2);
+    p.vx = 0;
+    p.vy = 0;
+    p.oobT = 0;
+    game.toast = "Recovered from out of bounds.";
+  }
+}
+
+function stepGame(game, dt) {
+  if (!game) return;
+
+  if (game.shakeT > 0) game.shakeT = Math.max(0, game.shakeT - dt);
+  if (game.shakeT <= 0) game.shake *= 0.90;
+
+  game.turnMsLeft -= dt * 1000;
+  if (game.turnMsLeft <= 0 && game.phase === "play") {
+    endTurn(game, "Time up");
+  }
+
+  if (game.mode === "boss") {
+    updateBoss(game, dt);
+    updateStones(game, dt);
+  }
+
+  if (game.turnState === "resolving" && game.phase === "play") {
+    // integrate all players
+    for (const pid of Object.keys(game.players)) {
+      const pl = game.players[pid];
+      if (!pl) continue;
+
+      pl.magnetT = Math.max(0, pl.magnetT - dt);
+      if (pl.dashStrikeWindow > 0) pl.dashStrikeWindow = Math.max(0, pl.dashStrikeWindow - dt);
+
+      applyMagnet(game, pl, dt);
+
+      pl.x += pl.vx * dt;
+      pl.y += pl.vy * dt;
+
+      pl.vx *= Math.pow(pl.friction, dt * 60);
+      pl.vy *= Math.pow(pl.friction, dt * 60);
+
+      if (Math.abs(pl.vx) < 2) pl.vx = 0;
+      if (Math.abs(pl.vy) < 2) pl.vy = 0;
+
+      clampSpeed(pl, 1500);
+
+      // walls
+      for (const w of game.walls) {
+        if (circleRectCollide(pl.x, pl.y, pl.r, w.x, w.y, w.w, w.h)) resolveCircleRect(pl, w);
+      }
+
+      // pads
+      for (const pad of game.pads) {
+        if (circleRectCollide(pl.x, pl.y, pl.r, pad.x, pad.y, pad.w, pad.h)) applyPadBoost(pl);
+      }
+
+      // coins
+      for (const c of game.coins) {
+        if (c.takenBy) continue;
+        const dx = pl.x - c.x, dy = pl.y - c.y;
+        if (Math.hypot(dx, dy) <= pl.r + c.r) {
+          c.takenBy = pid;
+          pl.coins += 10;
+          pl.score += 25;
+        }
+      }
+
+      // items (skip stones)
+      for (const it of game.items) {
+        if (it.type === "stone") continue;
+        if (it.takenBy) continue;
+        const dx = pl.x - it.x, dy = pl.y - it.y;
+        if (Math.hypot(dx, dy) <= pl.r + it.r) {
+          it.takenBy = pid;
+          if (it.type === "dash") pl.dashCharges += 1;
+          if (it.type === "shield") pl.shield = true;
+          if (it.type === "magnet") pl.magnetT = 6.0;
+        }
+      }
+
+      // traps
+      for (const t of game.traps) {
+        const dx = pl.x - t.x, dy = pl.y - t.y;
+        if (Math.hypot(dx, dy) <= pl.r + t.r) {
+          if (pl.shield) {
+            pl.shield = false;
+          } else {
+            // reset
+            pl.x = 120;
+            pl.y = game.H / 2;
+            pl.vx = 0; pl.vy = 0;
+          }
+        }
+      }
+
+      // player bumps stones
+      const stones = game.items.filter(it => it.type === "stone");
+      for (const s of stones) {
+        const dx = s.x - pl.x, dy = s.y - pl.y;
+        const d = Math.hypot(dx, dy);
+        if (d <= s.r + pl.r) {
+          const sp = Math.max(80, Math.min(420, Math.hypot(pl.vx, pl.vy) + 120));
+          const ux = dx / (d || 1), uy = dy / (d || 1);
+          s.vx += ux * sp * 0.85;
+          s.vy += uy * sp * 0.85;
+          game.shake = Math.max(game.shake, 6);
+          game.shakeT = Math.max(game.shakeT, 0.10);
+        }
+      }
+
+      // boss collisions
+      if (game.boss) {
+        const boss = game.boss;
+        const dx = pl.x - boss.x;
+        const dy = pl.y - boss.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist <= pl.r + boss.r) {
+          const ux = dx / (dist || 1), uy = dy / (dist || 1);
+          pl.vx += ux * 220;
+          pl.vy += uy * 220;
+
+          if (pl.dashStrikeWindow > 0) {
+            let source = "DASH";
+            if (boss.rules.includes("RICOCHET_REQUIRED")) source = "RICOCHET_OK";
+            const ang = Math.atan2(dy, dx);
+            bossTakeDamage(game, 1, source, ang);
+            pl.dashStrikeWindow = 0;
+          }
+        }
+
+        // parry ring punish
+        if (boss.rules.includes("PARRY_ONLY") && boss.ring && boss.ring.active) {
+          const rx = pl.x - boss.ring.x, ry = pl.y - boss.ring.y;
+          const d = Math.hypot(rx, ry);
+          const hitRing = Math.abs(d - boss.ring.r) < 10;
+          if (hitRing && pl.dashStrikeWindow <= 0) {
+            if (pl.shield) pl.shield = false;
+            else {
+              pl.x = 120;
+              pl.y = game.H / 2;
+              pl.vx = 0; pl.vy = 0;
+            }
+          }
+        }
+      }
+
+      // out of bounds recovery
+      recoverIfOutOfBounds(game, pl, dt);
+    }
+
+    const stopped = Object.values(game.players).every(pl => pl && isStopped(pl));
+    if (stopped) endTurn(game, null);
+  }
+
+  // race win check
+  if (game.mode === "race" && game.finish && game.phase === "play") {
+    for (const pid of Object.keys(game.players)) {
+      const p = game.players[pid];
+      if (!p || p.finished) continue;
+      if (circleRectCollide(p.x, p.y, p.r, game.finish.x, game.finish.y, game.finish.w, game.finish.h)) {
+        p.finished = true;
+        game.winnerId = pid;
+        game.phase = "round_end";
+        game.toast = `Winner: ${pid}`;
+        p.score += 100;
+        p.coins += 20;
+      }
+    }
+  }
+
+  // boss win check
+  if (game.mode === "boss" && game.boss && game.phase === "play") {
+    if (game.boss.hp <= 0) {
+      game.phase = "round_end";
+      game.toast = "Boss defeated!";
+      for (const pid of Object.keys(game.players)) {
+        if (!game.players[pid]) continue;
+        game.players[pid].coins += 40;
+        game.players[pid].score += 80;
+      }
+    }
+  }
+}
+
+function hostResetPositions(game) {
+  if (!game) return;
+  const ids = game.turnOrder;
+  const startY = game.H / 2;
+  for (let i = 0; i < ids.length; i++) {
+    const p = game.players[ids[i]];
+    if (!p) continue;
+    p.x = 120;
+    p.y = startY + (i - ids.length / 2) * 44;
+    p.vx = 0; p.vy = 0;
+    p.lastSafeX = p.x;
+    p.lastSafeY = p.y;
+    p.oobT = 0;
+  }
+  game.toast = "Host reset positions.";
+}
+
+function hostReloadMap(game) {
+  if (!game) return;
+  if (game.mode === "race") {
+    buildRaceLevel(game, game.levelId);
+    game.toast = "Host reloaded map.";
+  } else {
+    buildBossRound(game);
+    game.toast = "Host restarted boss arena.";
+  }
+}
+
 function makeSnapshot(room) {
   const game = room.game;
   const lobby = room.lobby;
+
+  const playerIds = roomPlayerIds(room);
+  const players = playerIds.map(pid => ({
+    id: pid,
+    name: lobby.names[pid] || pid,
+    pick: lobby.picks[pid] || "agouti",
+    ready: !!lobby.ready[pid],
+  }));
 
   return {
     t: "snap",
@@ -801,10 +1023,8 @@ function makeSnapshot(room) {
     lobby: {
       started: lobby.started,
       mode: lobby.mode,
-      picks: lobby.picks,
-      ready: lobby.ready,
-      players: roomPlayerIds(room), // FIXED
       maxPlayers: lobby.maxPlayers,
+      players,
     },
     game: game ? {
       mode: game.mode,
@@ -879,6 +1099,7 @@ wss.on("connection", (ws) => {
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return; }
 
+    // Create room
     if (msg.t === "create") {
       const code = makeRoomCode();
       const room = makeRoom(code);
@@ -887,6 +1108,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Join room
     if (msg.t === "join") {
       const code = String(msg.code || "").trim().toUpperCase().slice(0, 6);
       if (!code) return send(ws, { t: "err", m: "No room code." });
@@ -908,17 +1130,30 @@ wss.on("connection", (ws) => {
       if (!room.hostId) room.hostId = ws.playerId;
 
       room.lobby.ready[ws.playerId] = false;
+      room.lobby.picks[ws.playerId] = room.lobby.picks[ws.playerId] || "agouti";
+      room.lobby.names[ws.playerId] = room.lobby.names[ws.playerId] || ws.playerId;
 
       send(ws, { t: "joined", id: ws.playerId, code, hostId: room.hostId });
       broadcast(room, makeSnapshot(room));
       return;
     }
 
+    // Must be in a room for everything else
     const room = ws.roomCode ? getRoom(ws.roomCode) : null;
     if (!room) return;
 
     const pid = ws.playerId;
 
+    // Set player name (lobby only)
+    if (msg.t === "set_name") {
+      if (room.lobby.started) return;
+      const nm = sanitizeName(msg.name);
+      room.lobby.names[pid] = nm || pid;
+      broadcast(room, makeSnapshot(room));
+      return;
+    }
+
+    // Host can set mode
     if (msg.t === "set_mode") {
       if (pid !== room.hostId) return;
       const m = msg.mode === "boss" ? "boss" : "race";
@@ -928,6 +1163,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Character pick
     if (msg.t === "pick") {
       if (room.lobby.started) return;
       const charId = String(msg.charId || "agouti");
@@ -937,6 +1173,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Ready toggle
     if (msg.t === "ready") {
       if (room.lobby.started) return;
       const v = !!msg.v;
@@ -945,15 +1182,17 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Host start
     if (msg.t === "start") {
       if (pid !== room.hostId) return;
       if (room.lobby.started) return;
 
-      const ids = roomPlayerIds(room); // FIXED
+      const ids = roomPlayerIds(room);
       if (ids.length < 1) return;
 
       for (const id of ids) {
         if (!room.lobby.picks[id]) room.lobby.picks[id] = "agouti";
+        if (!room.lobby.names[id]) room.lobby.names[id] = id;
       }
 
       for (const id of ids) {
@@ -973,9 +1212,26 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Host utilities during match
+    if (msg.t === "host_reload_map") {
+      if (pid !== room.hostId) return;
+      if (!room.game) return;
+      hostReloadMap(room.game);
+      broadcast(room, makeSnapshot(room));
+      return;
+    }
+
+    if (msg.t === "host_reset_positions") {
+      if (pid !== room.hostId) return;
+      if (!room.game) return;
+      hostResetPositions(room.game);
+      broadcast(room, makeSnapshot(room));
+      return;
+    }
+
+    // Gameplay inputs
     if (msg.t === "act") {
       if (!room.game) return;
-
       const g = room.game;
       if (g.phase !== "play") return;
       if (g.activeId !== pid) return;
@@ -991,7 +1247,6 @@ wss.on("connection", (ws) => {
         broadcast(room, makeSnapshot(room));
         return;
       }
-
       return;
     }
 
@@ -1010,14 +1265,14 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Reset match (back to lobby)
     if (msg.t === "reset") {
       if (pid !== room.hostId) return;
 
       room.lobby.started = false;
       room.game = null;
 
-      // keep picks (optional), but reset ready states
-      const ids = roomPlayerIds(room); // FIXED
+      const ids = roomPlayerIds(room);
       room.lobby.ready = {};
       for (const id of ids) room.lobby.ready[id] = false;
 
@@ -1035,9 +1290,11 @@ wss.on("connection", (ws) => {
 
     delete room.lobby.picks[pid];
     delete room.lobby.ready[pid];
+    delete room.lobby.names[pid];
 
+    // host migration
     if (pid === room.hostId) {
-      const nextHost = room.clients.values().next().value || null; // Map values are pids
+      const nextHost = room.clients.values().next().value || null;
       room.hostId = nextHost;
     }
 
