@@ -3,126 +3,120 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Forest Flick Multiplayer (Turn Based)</title>
+  <title>Forest Flick Multiplayer</title>
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #070a14; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     .wrap { display: grid; place-items: center; height: 100%; }
-    canvas { background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); touch-action: none; }
+    canvas {
+      background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14);
+      border-radius: 16px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      touch-action: none;
+    }
 
     .hud {
       position: fixed; left: 16px; top: 12px; color: rgba(255,255,255,0.92);
-      font-size: 14px; line-height: 1.35; user-select: none;
-      background: rgba(0,0,0,0.25); padding: 10px 12px; border-radius: 12px; backdrop-filter: blur(6px);
-      max-width: 410px;
+      font-size: 14px; line-height: 1.35;
+      background: rgba(10,12,20,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      padding: 10px 12px;
+      min-width: 260px;
+      backdrop-filter: blur(10px);
     }
-    .hud b { font-weight: 900; }
-    .hud .small { opacity: 0.86; font-size: 12px; margin-top: 6px; line-height: 1.35; }
-
     .toast {
-      position: fixed; right: 16px; top: 12px; color: rgba(255,255,255,0.95);
-      background: rgba(0,0,0,0.35); padding: 10px 12px; border-radius: 12px; backdrop-filter: blur(6px);
-      font-size: 13px; max-width: 460px;
+      position: fixed; left: 50%; top: 18px; transform: translateX(-50%);
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.65);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 999px;
       display: none;
+      user-select: none;
+      backdrop-filter: blur(10px);
     }
 
     .screen {
-      position: fixed; inset: 0;
-      display: none;
-      background: radial-gradient(900px 500px at 25% 20%, rgba(60,90,200,0.35), rgba(0,0,0,0.85));
-      backdrop-filter: blur(6px);
-      color: rgba(255,255,255,0.92);
-      padding: 28px 22px;
-      overflow: auto;
+      position: fixed; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: radial-gradient(1000px 600px at 30% 10%, rgba(64,96,255,0.18), rgba(0,0,0,0.45));
+      padding: 22px;
     }
-    .screen.show { display: block; }
-
-    .title { font-size: 28px; font-weight: 900; letter-spacing: 0.2px; margin-bottom: 6px; }
-    .sub { opacity: 0.85; margin-bottom: 14px; max-width: 980px; }
-
-    .row2 { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; max-width: 1100px; }
+    .screen.show { display: flex; }
     .panel {
-      flex: 1 1 480px;
-      background: rgba(255,255,255,0.05);
+      background: rgba(10,12,20,0.72);
       border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 16px;
-      padding: 14px;
-      min-width: 320px;
+      border-radius: 18px;
+      padding: 14px 14px;
+      box-shadow: 0 14px 60px rgba(0,0,0,0.55);
+      backdrop-filter: blur(14px);
     }
-    .panel h3 { margin: 0 0 10px; font-size: 16px; letter-spacing: 0.2px; }
-
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-    .card {
-      position: relative;
-      border-radius: 16px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.10);
-      padding: 14px 14px 12px;
-      cursor: pointer;
-      transition: transform 0.08s ease, background 0.12s ease, border 0.12s ease;
-      user-select: none;
-      overflow: hidden;
-    }
-    .card:hover { transform: translateY(-2px); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); }
-    .card.sel { border-color: rgba(124,242,255,0.65); background: rgba(124,242,255,0.08); }
-
-    .row { display: flex; gap: 10px; align-items: center; }
-    .avatar {
-      width: 46px; height: 46px; border-radius: 999px;
-      background: rgba(255,255,255,0.12);
-      display: grid; place-items: center;
-      border: 1px solid rgba(255,255,255,0.14);
-      flex: 0 0 auto;
-    }
-    .avatar span { font-weight: 900; opacity: 0.92; }
-    .name { font-weight: 900; font-size: 16px; margin: 0; }
-    .trait { margin-top: 10px; opacity: 0.9; font-size: 13px; line-height: 1.35; }
-    .tag {
-      display: inline-block;
-      margin-top: 10px;
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.10);
-      opacity: 0.92;
-    }
+    .title { font-size: 30px; font-weight: 800; color: rgba(255,255,255,0.94); }
+    .sub { color: rgba(255,255,255,0.72); margin-top: 6px; font-size: 13px; }
+    h3 { margin: 0 0 10px 0; color: rgba(255,255,255,0.92); font-size: 16px; }
 
     .pill {
-      display: inline-block;
-      padding: 4px 10px;
+      display: inline-flex; align-items:center; gap: 8px;
+      padding: 6px 10px;
       border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.28);
+      color: rgba(255,255,255,0.86);
       font-size: 12px;
-      font-weight: 800;
-      opacity: 0.92;
-      margin-right: 8px;
-    }
-
-    .btnRow { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; max-width: 1040px; }
-    .btn {
-      cursor: pointer;
-      user-select: none;
-      border-radius: 12px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: rgba(255,255,255,0.92);
-      font-weight: 900;
-      font-size: 13px;
-    }
-    .btn:hover { background: rgba(255,255,255,0.10); }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-    input, select {
-      font: inherit;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(10,12,20,0.8);
-      color: #fff;
-      padding: 8px 10px;
     }
     .inline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+    input, select {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.92);
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+    }
+    input::placeholder { color: rgba(255,255,255,0.40); }
+
+    .btn {
+      background: rgba(64,96,255,0.18);
+      border: 1px solid rgba(110,140,255,0.35);
+      color: rgba(255,255,255,0.92);
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+      user-select: none;
+    }
+    .btn:hover { background: rgba(64,96,255,0.26); border-color: rgba(140,170,255,0.50); }
+    .btn:active { transform: scale(0.98); background: rgba(64,96,255,0.34); }
+    .btn.clicked { outline: 2px solid rgba(255,255,255,0.25); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .row2 { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 14px; width: 920px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .card {
+      border-radius: 16px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.24);
+      cursor: pointer;
+      transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease;
+      min-height: 106px;
+    }
+    .card:hover { transform: translateY(-1px); border-color: rgba(150,180,255,0.38); }
+    .card.sel { border-color: rgba(120,160,255,0.75); background: rgba(64,96,255,0.14); }
+    .row { display:flex; gap: 10px; align-items:center; }
+    .avatar {
+      width: 38px; height: 38px; border-radius: 999px;
+      display:grid; place-items:center;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      font-weight: 800;
+    }
+    .name { color: rgba(255,255,255,0.92); font-weight: 800; }
+    .tag { color: rgba(255,255,255,0.62); font-size: 12px; margin-top: 2px; }
+    .trait { color: rgba(255,255,255,0.72); font-size: 12px; margin-top: 8px; line-height: 1.3; }
+
+    .btnRow { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -134,66 +128,68 @@
   <div class="toast" id="toast"></div>
 
   <div class="screen show" id="lobbyScreen">
-    <div class="title">Forest Flick Multiplayer</div>
-    <div class="sub">
-      Turn based. One flick per turn. Physics resolves, then next player goes. Race mode or Boss co-op mode.
-    </div>
+    <div style="width: 920px;">
+      <div class="title">Forest Flick Multiplayer</div>
+      <div class="sub">Turn based. One flick per turn. Physics resolves, then next player goes. Race mode or Boss co-op mode.</div>
 
-    <div class="sub inline">
-      <span class="pill" id="roomPill">Room: none</span>
-      <span class="pill" id="youPill">You: -</span>
-      <span class="pill" id="hostPill">Host: -</span>
-    </div>
-
-    <div class="panel" style="max-width: 920px;">
-      <h3>Join a Room</h3>
-      <div class="inline">
-        <input id="roomInput" placeholder="Room code (ex TT12)" maxlength="6" />
-        <button class="btn" id="joinBtn">Join</button>
-        <button class="btn" id="createBtn">Create</button>
-      </div>
-      <div class="sub" style="margin-top:10px;">
-        Friends can join by opening the same link and entering the same room code.
-      </div>
-    </div>
-
-    <div class="row2" style="margin-top:14px;">
-      <div class="panel">
-        <h3>Choose Your Forest Friend</h3>
-        <div class="grid" id="charGrid"></div>
+      <div class="sub inline" style="margin-top:10px;">
+        <span class="pill" id="roomPill">Room: none</span>
+        <span class="pill" id="youPill">You: -</span>
+        <span class="pill" id="hostPill">Host: -</span>
       </div>
 
-      <div class="panel">
-        <h3>Lobby</h3>
-        <div class="sub" id="rosterText">Players: -</div>
-        <div class="sub" id="readyText">Ready: -</div>
+      <div class="panel" style="max-width: 920px; margin-top: 12px;">
+        <h3>Join a Room</h3>
+        <div class="inline">
+          <input id="nameInput" placeholder="Your name (shown to others)" maxlength="18" />
+          <input id="roomInput" placeholder="Room code (ex TT12)" maxlength="6" />
+          <button class="btn" id="joinBtn">Join</button>
+          <button class="btn" id="createBtn">Create</button>
+        </div>
+        <div class="sub" style="margin-top:10px;">Friends can join by opening the same link and entering the same room code.</div>
+      </div>
 
-        <div class="sub" style="margin-top:10px;">
-          <span class="pill" id="modePill">Mode: -</span>
+      <div class="row2" style="margin-top:14px;">
+        <div class="panel">
+          <h3>Choose Your Forest Friend</h3>
+          <div class="grid" id="charGrid"></div>
         </div>
 
-        <div class="inline" style="margin-top:10px;">
-          <select id="modeSelect">
-            <option value="race">Obstacle Race</option>
-            <option value="boss">Boss Rush</option>
-          </select>
-          <button class="btn" id="setModeBtn">Set Mode (Host)</button>
-        </div>
+        <div class="panel">
+          <h3>Lobby</h3>
+          <div class="sub" id="rosterText">Players: -</div>
+          <div class="sub" id="readyText">Ready: -</div>
 
-        <div class="btnRow">
-          <button class="btn" id="readyBtn" disabled>Ready</button>
-          <button class="btn" id="startBtn" disabled>Start (Host)</button>
-          <button class="btn" id="resetBtn" disabled>Reset (Host)</button>
-        </div>
+          <div class="sub" style="margin-top:10px;">
+            <span class="pill" id="modePill">Mode: -</span>
+          </div>
 
-        <div class="sub">
-          Everyone must pick a character and Ready before Host can Start.
+          <div class="inline" style="margin-top:10px;">
+            <select id="modeSelect">
+              <option value="race">Obstacle Race</option>
+              <option value="boss">Boss Rush</option>
+            </select>
+            <button class="btn" id="setModeBtn">Set Mode (Host)</button>
+          </div>
+
+          <div class="btnRow">
+            <button class="btn" id="readyBtn" disabled>Ready</button>
+            <button class="btn" id="startBtn" disabled>Start (Host)</button>
+            <button class="btn" id="resetBtn" disabled>Reset (Host)</button>
+          </div>
+
+          <div class="btnRow">
+            <button class="btn" id="reloadMapBtn" disabled>Reload Map (Host)</button>
+            <button class="btn" id="resetPosBtn" disabled>Reset Positions (Host)</button>
+          </div>
+
+          <div class="sub">Everyone must pick a character and Ready before Host can Start.</div>
         </div>
       </div>
-    </div>
 
-    <div class="sub" style="margin-top:12px;">
-      Controls during your turn: drag from your player to aim, release to flick. While moving, press Space or tap to dash if you have dash charges.
+      <div class="sub" style="margin-top:12px;">
+        Controls during your turn: drag from your player to aim, release to flick. While moving, press Space or tap to dash if you have dash charges.
+      </div>
     </div>
   </div>
 
@@ -201,7 +197,6 @@
 (() => {
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
 
   const hud = document.getElementById("hud");
   const toast = document.getElementById("toast");
@@ -210,7 +205,9 @@
   const roomPill = document.getElementById("roomPill");
   const youPill = document.getElementById("youPill");
   const hostPill = document.getElementById("hostPill");
+  const modePill = document.getElementById("modePill");
 
+  const nameInput = document.getElementById("nameInput");
   const roomInput = document.getElementById("roomInput");
   const joinBtn = document.getElementById("joinBtn");
   const createBtn = document.getElementById("createBtn");
@@ -218,47 +215,25 @@
   const charGrid = document.getElementById("charGrid");
   const rosterText = document.getElementById("rosterText");
   const readyText = document.getElementById("readyText");
-  const modePill = document.getElementById("modePill");
 
   const modeSelect = document.getElementById("modeSelect");
   const setModeBtn = document.getElementById("setModeBtn");
+
   const readyBtn = document.getElementById("readyBtn");
   const startBtn = document.getElementById("startBtn");
   const resetBtn = document.getElementById("resetBtn");
 
-  // characters
+  const reloadMapBtn = document.getElementById("reloadMapBtn");
+  const resetPosBtn = document.getElementById("resetPosBtn");
+
   const CHARACTERS = [
     { id:"agouti", name:"Agouti", avatar:"A", tag:"Power", desc:"First launch each round is stronger." },
     { id:"frog", name:"Tree Frog", avatar:"F", tag:"Bounce", desc:"Keeps more speed on wall rebounds." },
     { id:"hummingbird", name:"Hummingbird", avatar:"H", tag:"Mobility", desc:"Starts with 1 dash charge each round." },
-    { id:"manicou", name:"Manicou", avatar:"M", tag:"Safety", desc:"Starts with a shield each round (blocks one trap hit)." }
+    { id:"manicou", name:"Manicou", avatar:"M", tag:"Safety", desc:"Starts with a shield each round (blocks one trap hit)." },
   ];
 
-  const COLORS = {
-    wall: "rgba(255,255,255,0.10)",
-    wallEdge: "rgba(255,255,255,0.18)",
-    pad: "rgba(92,200,255,0.25)",
-    padEdge: "rgba(92,200,255,0.55)",
-    coin: "#ffd36a",
-    coinGlow: "rgba(255,211,106,0.25)",
-    trap: "#ff5a7a",
-    trapGlow: "rgba(255,90,122,0.22)",
-    finish: "#7cf2ff",
-    finishGlow: "rgba(124,242,255,0.24)",
-    dash: "#5cc8ff",
-    dashGlow: "rgba(92,200,255,0.25)",
-    shield: "#76ff8a",
-    shieldGlow: "rgba(118,255,138,0.20)",
-    magnet: "#c56bff",
-    magnetGlow: "rgba(197,107,255,0.22)",
-    boss: "rgba(255,255,255,0.85)",
-    bossGlow: "rgba(255,255,255,0.10)",
-    bossHP: "rgba(255,90,122,0.90)",
-    bossHPBack: "rgba(255,255,255,0.16)",
-  };
-
-  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function norm(x,y){
+  function nrm(x,y){
     const l = Math.hypot(x,y);
     return l > 0 ? {x:x/l,y:y/l,l} : {x:0,y:0,l:0};
   }
@@ -271,17 +246,22 @@
     showToast._t = setTimeout(() => toast.style.display = "none", ms);
   }
 
+  function clickFlash(btn) {
+    btn.classList.add("clicked");
+    setTimeout(() => btn.classList.remove("clicked"), 220);
+  }
+
   // networking
   let ws = null;
   let myId = null;
   let roomCode = null;
   let hostId = null;
-
   let snap = null;
 
   // local selection
   let myPick = null;
   let myReady = false;
+  let myName = "";
 
   function wsUrl() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -292,14 +272,14 @@
     if (ws && ws.readyState === 1) return;
 
     ws = new WebSocket(wsUrl());
-    ws.onopen = () => {};
-    ws.onclose = () => {};
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+
       if (msg.t === "created") {
         roomInput.value = msg.code;
         showToast("Room created: " + msg.code, 2000);
       }
+
       if (msg.t === "joined") {
         myId = msg.id;
         roomCode = msg.code;
@@ -308,20 +288,25 @@
         youPill.textContent = "You: " + myId;
         hostPill.textContent = "Host: " + hostId;
         readyBtn.disabled = false;
+
+        // send name immediately
+        myName = (nameInput.value || "").trim();
+        if (!myName) myName = "Player " + myId.slice(0,4);
+        send({ t:"set_name", name: myName });
+
         renderLobbyButtons();
       }
+
       if (msg.t === "err") showToast(msg.m || "Error");
+
       if (msg.t === "snap") {
         snap = msg;
         hostId = msg.room.hostId;
         hostPill.textContent = "Host: " + hostId;
+
         renderLobbyButtons();
 
-        // toast and hint from server
         if (snap.game && snap.game.toast) showToast(snap.game.toast, 1500);
-        if (snap.game && snap.game.hint) {
-          // shown in HUD
-        }
       }
     };
   }
@@ -332,11 +317,13 @@
   }
 
   createBtn.onclick = () => {
+    clickFlash(createBtn);
     connectIfNeeded();
     setTimeout(() => send({ t:"create" }), 50);
   };
 
   joinBtn.onclick = () => {
+    clickFlash(joinBtn);
     const code = roomInput.value.trim().toUpperCase();
     if (!code) { showToast("Enter a room code"); return; }
     connectIfNeeded();
@@ -344,12 +331,14 @@
   };
 
   setModeBtn.onclick = () => {
+    clickFlash(setModeBtn);
     if (!snap || !snap.lobby) return;
     if (myId !== hostId) { showToast("Only host can set mode"); return; }
     send({ t:"set_mode", mode: modeSelect.value });
   };
 
   readyBtn.onclick = () => {
+    clickFlash(readyBtn);
     if (!roomCode) { showToast("Join a room first"); return; }
     if (!myPick) { showToast("Pick a character first"); return; }
     myReady = !myReady;
@@ -357,14 +346,28 @@
   };
 
   startBtn.onclick = () => {
+    clickFlash(startBtn);
     if (myId !== hostId) return;
     send({ t:"start" });
   };
 
   resetBtn.onclick = () => {
+    clickFlash(resetBtn);
     if (myId !== hostId) return;
     send({ t:"reset" });
     myReady = false;
+  };
+
+  reloadMapBtn.onclick = () => {
+    clickFlash(reloadMapBtn);
+    if (myId !== hostId) return;
+    send({ t:"host_reload_map" });
+  };
+
+  resetPosBtn.onclick = () => {
+    clickFlash(resetPosBtn);
+    if (myId !== hostId) return;
+    send({ t:"host_reset_positions" });
   };
 
   function renderLobbyButtons() {
@@ -372,22 +375,19 @@
     setModeBtn.disabled = !isHost;
     startBtn.disabled = !isHost;
     resetBtn.disabled = !isHost;
+    reloadMapBtn.disabled = !isHost || !(snap && snap.lobby && snap.lobby.started);
+    resetPosBtn.disabled = !isHost || !(snap && snap.lobby && snap.lobby.started);
 
-    // lobby info
     if (snap && snap.lobby) {
       modePill.textContent = "Mode: " + (snap.lobby.mode === "boss" ? "Boss Rush" : "Obstacle Race");
-      const players = snap.lobby.players || [];
-      rosterText.textContent = "Players: " + (players.length ? players.join(", ") : "-");
 
-      const readyPairs = [];
-      for (const pid of players) {
-        const r = !!snap.lobby.ready?.[pid];
-        const pick = snap.lobby.picks?.[pid] || "none";
-        readyPairs.push(`${pid} ${r ? "[Ready]" : "[Not Ready]"} (${pick})`);
-      }
+      const players = snap.lobby.players || [];
+      const names = players.map(p => `${p.name} (${p.id})`);
+      rosterText.textContent = "Players: " + (names.length ? names.join(", ") : "-");
+
+      const readyPairs = players.map(p => `${p.name} ${p.ready ? "[Ready]" : "[Not Ready]"} (${p.pick})`);
       readyText.textContent = "Ready: " + (readyPairs.length ? readyPairs.join(" | ") : "-");
 
-      // show or hide lobby screen based on started
       if (snap.lobby.started) lobbyScreen.classList.remove("show");
       else lobbyScreen.classList.add("show");
     }
@@ -420,7 +420,6 @@
       charGrid.appendChild(el);
     }
   }
-
   buildCharacterUI();
 
   // Input for turn actions
@@ -433,409 +432,268 @@
     const r = canvas.getBoundingClientRect();
     const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
     const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
-    return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
-  }
-
-  function canActNow() {
-    if (!snap || !snap.game) return false;
-    if (snap.game.phase !== "play") return false;
-    if (snap.game.turn.state !== "aim") return false;
-    return snap.game.turn.activeId === myId;
+    return {
+      x: (clientX - r.left) * (canvas.width / r.width),
+      y: (clientY - r.top) * (canvas.height / r.height)
+    };
   }
 
   function myPlayer() {
-    if (!snap || !snap.game) return null;
-    return snap.game.players?.[myId] || null;
+    if (!snap || !snap.game || !snap.game.players) return null;
+    return snap.game.players[myId] || null;
   }
 
-  canvas.addEventListener("pointerdown", (e) => {
-    if (lobbyScreen.classList.contains("show")) return;
-    if (!canActNow()) return;
+  function isMyTurn() {
+    return snap && snap.game && snap.game.turn && snap.game.turn.activeId === myId && snap.game.turn.state === "aim";
+  }
 
-    const p = getPos(e);
+  function down(e) {
+    if (!isMyTurn()) return;
+    const p = myPlayer();
+    if (!p) return;
+    const pos = getPos(e);
+    const d = Math.hypot(pos.x - p.x, pos.y - p.y);
+    if (d > p.r + 28) return; // must start drag near your ball
     pointerDown = true;
-    dragStart = p;
-    dragNow = p;
+    dragging = true;
+    dragStart = pos;
+    dragNow = pos;
+    e.preventDefault();
+  }
 
-    const me = myPlayer();
-    if (!me) return;
-
-    const d = Math.hypot(p.x - me.x, p.y - me.y);
-    dragging = d <= me.r + 14;
-  });
-
-  canvas.addEventListener("pointermove", (e) => {
-    if (!pointerDown) return;
+  function move(e) {
+    if (!dragging) return;
     dragNow = getPos(e);
-  });
+    e.preventDefault();
+  }
 
-  window.addEventListener("pointerup", () => {
-    if (!pointerDown) return;
+  function up(e) {
+    if (!dragging) return;
+    dragging = false;
     pointerDown = false;
-    if (!dragging) { dragging = false; return; }
-    if (!canActNow()) { dragging = false; return; }
+
+    const p = myPlayer();
+    if (!p) return;
 
     const dx = dragStart.x - dragNow.x;
     const dy = dragStart.y - dragNow.y;
-    const n = norm(dx, dy);
+    const v = nrm(dx, dy);
 
-    const MAX_PULL = 170;
-    const FORCE_SCALE = 0.11;
-    const LAUNCH_MULT = 95;
-
-    const pull = clamp(n.l, 0, MAX_PULL);
-    if (pull < 6) { dragging = false; return; }
-
-    const power = pull * FORCE_SCALE;
-    const vx = n.x * power * LAUNCH_MULT;
-    const vy = n.y * power * LAUNCH_MULT;
+    // power
+    const power = clamp(v.l * 6.0, 0, 1200);
+    const vx = v.x * power;
+    const vy = v.y * power;
 
     send({ t:"act", kind:"flick", vx, vy });
-    dragging = false;
-  });
-
-  // Dash input: Space or tap while moving during resolving on your turn
-  function canDashNow() {
-    if (!snap || !snap.game) return false;
-    if (snap.game.phase !== "play") return false;
-    if (snap.game.turn.activeId !== myId) return false;
-    return snap.game.turn.state === "resolving";
+    e.preventDefault();
   }
+
+  canvas.addEventListener("mousedown", down);
+  canvas.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+
+  canvas.addEventListener("touchstart", down, {passive:false});
+  canvas.addEventListener("touchmove", move, {passive:false});
+  window.addEventListener("touchend", up, {passive:false});
 
   window.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
-      if (lobbyScreen.classList.contains("show")) return;
-      if (canDashNow()) send({ t:"dash" });
+      if (!snap || !snap.game) return;
+      if (snap.game.turn.activeId !== myId) return;
+      if (snap.game.turn.state !== "resolving") return;
+      send({ t:"dash" });
     }
   });
 
-  canvas.addEventListener("click", () => {
-    if (lobbyScreen.classList.contains("show")) return;
-    if (canDashNow()) send({ t:"dash" });
-  });
-
-  // Drawing helpers
-  function drawGlowCircle(x,y,r,color) {
-    ctx.beginPath();
-    ctx.fillStyle = color;
-    ctx.arc(x,y,r,0,Math.PI*2);
-    ctx.fill();
+  // Rendering helpers
+  function charBaseHue(charId) {
+    if (charId === "agouti") return 32;
+    if (charId === "frog") return 115;
+    if (charId === "hummingbird") return 190;
+    if (charId === "manicou") return 285;
+    return 200;
   }
 
-  function drawTTBackdrop() {
-    ctx.save();
-    ctx.fillStyle = "rgba(124,242,255,0.06)";
-    for (let i=0;i<7;i++){
-      const y = 120 + i * 55;
-      roundRect(60, y, W-120, 18, 10);
-      ctx.fill();
-    }
-    ctx.fillStyle = "rgba(255,211,106,0.05)";
-    roundRect(70, 70, 120, 60, 14);
-    roundRect(85, 55, 90, 25, 12);
-    ctx.fill();
-
-    ctx.fillStyle = "rgba(197,107,255,0.05)";
-    for (let i=0;i<8;i++){
-      const x = 560 + (i%4)*70;
-      const y = 70 + Math.floor(i/4)*70;
-      ctx.beginPath();
-      ctx.arc(x, y, 24, 0, Math.PI*2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI*2);
-      ctx.fill();
-    }
-
-    ctx.fillStyle = "rgba(118,255,138,0.05)";
-    for (let i=0;i<5;i++){
-      const x = 90 + i*80;
-      const y = H - 70;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + 22, y - 62);
-      ctx.lineTo(x + 44, y);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  function roundRect(x,y,w,h,r) {
-    if (ctx.roundRect) {
-      ctx.beginPath();
-      ctx.roundRect(x,y,w,h,r);
-      return;
-    }
-    const rr = Math.min(r, w/2, h/2);
-    ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rr);
-    ctx.arcTo(x + w, y + h, x, y + h, rr);
-    ctx.arcTo(x, y + h, x, y, rr);
-    ctx.arcTo(x, y, x + w, y, rr);
-    ctx.closePath();
-  }
-
-  // Render loop
-  let last = performance.now();
-  function loop(now) {
-    const dt = Math.min(1/30, (now - last) / 1000);
-    last = now;
-    draw();
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
+  function hsla(h,s,l,a=1){ return `hsla(${h} ${s}% ${l}% / ${a})`; }
 
   function draw() {
-    ctx.clearRect(0,0,W,H);
-    drawTTBackdrop();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    if (!snap || !snap.game) {
-      hud.innerHTML = `<b>Forest Flick</b><br>Join a room and pick a character.<div class="small">Server not started yet.</div>`;
+    const g = snap && snap.game;
+    if (!g) {
+      requestAnimationFrame(draw);
       return;
     }
 
-    const g = snap.game;
-
     // camera shake
-    ctx.save();
+    let sx = 0, sy = 0;
     if (g.shake && g.shake > 0) {
-      const ox = (Math.random()*2 - 1) * g.shake;
-      const oy = (Math.random()*2 - 1) * g.shake;
-      ctx.translate(ox, oy);
+      sx = (Math.random()*2 - 1) * g.shake;
+      sy = (Math.random()*2 - 1) * g.shake;
     }
+    ctx.save();
+    ctx.translate(sx, sy);
 
     // walls
-    for (const w of g.walls) {
-      ctx.fillStyle = COLORS.wall;
-      ctx.fillRect(w.x, w.y, w.w, w.h);
-      ctx.strokeStyle = COLORS.wallEdge;
-      ctx.strokeRect(w.x + 0.5, w.y + 0.5, w.w - 1, w.h - 1);
-    }
+    ctx.fillStyle = "rgba(255,255,255,0.09)";
+    for (const w of g.walls) ctx.fillRect(w.x, w.y, w.w, w.h);
 
     // pads
-    for (const p of g.pads) {
-      ctx.fillStyle = COLORS.pad;
-      ctx.fillRect(p.x, p.y, p.w, p.h);
-      ctx.strokeStyle = COLORS.padEdge;
-      ctx.strokeRect(p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1);
-      ctx.fillStyle = "rgba(255,255,255,0.65)";
-      ctx.font = "10px system-ui";
-      ctx.fillText("BOOST", p.x + 8, p.y + 12);
+    ctx.fillStyle = "rgba(64,96,255,0.20)";
+    for (const p of g.pads) ctx.fillRect(p.x, p.y, p.w, p.h);
+
+    // traps
+    for (const t of g.traps) {
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(255,80,80,0.28)";
+      ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
+      ctx.fill();
     }
 
     // finish
-    if (g.mode === "race" && g.finish) {
-      ctx.save();
-      ctx.fillStyle = COLORS.finishGlow;
-      ctx.fillRect(g.finish.x - 6, g.finish.y - 6, g.finish.w + 12, g.finish.h + 12);
-      ctx.fillStyle = "rgba(124,242,255,0.10)";
+    if (g.finish) {
+      ctx.fillStyle = "rgba(120,255,160,0.14)";
       ctx.fillRect(g.finish.x, g.finish.y, g.finish.w, g.finish.h);
-      ctx.strokeStyle = COLORS.finish;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(g.finish.x + 0.5, g.finish.y + 0.5, g.finish.w - 1, g.finish.h - 1);
-      ctx.fillStyle = "rgba(255,255,255,0.80)";
-      ctx.font = "800 12px system-ui";
-      ctx.fillText("FINISH", g.finish.x + 18, g.finish.y + 36);
-      ctx.restore();
+      ctx.strokeStyle = "rgba(120,255,160,0.28)";
+      ctx.strokeRect(g.finish.x, g.finish.y, g.finish.w, g.finish.h);
     }
 
     // coins
     for (const c of g.coins) {
       if (c.takenBy) continue;
-      drawGlowCircle(c.x, c.y, c.r + 10, COLORS.coinGlow);
       ctx.beginPath();
-      ctx.fillStyle = COLORS.coin;
+      ctx.fillStyle = "rgba(255,220,120,0.30)";
       ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
       ctx.fill();
     }
 
     // items
     for (const it of g.items) {
-      if (it.type !== "boulder" && it.takenBy) continue;
-      if (it.type === "boulder") {
-        drawGlowCircle(it.x, it.y, it.r + 14, "rgba(255,211,106,0.10)");
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(255,211,106,0.85)";
-        ctx.lineWidth = 3;
-        ctx.arc(it.x, it.y, it.r, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.fillStyle = "rgba(255,255,255,0.80)";
-        ctx.font = "900 10px system-ui";
-        ctx.fillText("BOULDER", it.x - 24, it.y + 4);
-        continue;
-      }
-
-      let c = COLORS.dash, glow = COLORS.dashGlow, label = "D";
-      if (it.type === "shield") { c = COLORS.shield; glow = COLORS.shieldGlow; label = "S"; }
-      if (it.type === "magnet") { c = COLORS.magnet; glow = COLORS.magnetGlow; label = "M"; }
-
-      drawGlowCircle(it.x, it.y, it.r + 12, glow);
+      if (it.takenBy) continue;
       ctx.beginPath();
-      ctx.strokeStyle = c;
-      ctx.lineWidth = 2;
+      if (it.type === "dash") ctx.fillStyle = "rgba(120,200,255,0.34)";
+      else if (it.type === "shield") ctx.fillStyle = "rgba(180,255,200,0.30)";
+      else if (it.type === "magnet") ctx.fillStyle = "rgba(255,160,220,0.30)";
+      else if (it.type === "stone") ctx.fillStyle = "rgba(255,255,255,0.18)";
+      else ctx.fillStyle = "rgba(255,255,255,0.18)";
       ctx.arc(it.x, it.y, it.r, 0, Math.PI*2);
-      ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.88)";
-      ctx.font = "900 12px system-ui";
-      ctx.fillText(label, it.x - 4, it.y + 4);
-    }
-
-    // traps
-    for (const t of g.traps) {
-      drawGlowCircle(t.x, t.y, t.r + 10, COLORS.trapGlow);
-      ctx.beginPath();
-      ctx.fillStyle = COLORS.trap;
-      ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
       ctx.fill();
     }
 
     // boss
     if (g.boss) {
-      const b = g.boss;
-
-      drawGlowCircle(b.x, b.y, b.r + 22, COLORS.bossGlow);
       ctx.beginPath();
-      ctx.strokeStyle = COLORS.boss;
-      ctx.lineWidth = 3;
-      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
-      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.14)";
+      ctx.arc(g.boss.x, g.boss.y, g.boss.r, 0, Math.PI*2);
+      ctx.fill();
 
-      // weakspot arc
-      if (b.rules && b.rules.includes("WEAKSPOT_CYCLE")) {
+      // weak spot glow arc
+      if (g.boss.rules && g.boss.rules.includes("WEAKSPOT_CYCLE")) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(120,220,255,0.95)";
-        ctx.lineWidth = 10;
-        ctx.arc(b.x, b.y, b.r + 8, b.weakAngle - b.weakArc/2, b.weakAngle + b.weakArc/2);
+        ctx.strokeStyle = "rgba(120,255,220,0.55)";
+        ctx.lineWidth = 6;
+        const a0 = g.boss.weakAngle - (g.boss.weakArc * 0.5);
+        const a1 = g.boss.weakAngle + (g.boss.weakArc * 0.5);
+        ctx.arc(g.boss.x, g.boss.y, g.boss.r + 7, a0, a1);
         ctx.stroke();
+        ctx.lineWidth = 1;
       }
 
       // parry ring
-      if (b.rules && b.rules.includes("PARRY_ONLY") && b.ring && b.ring.active) {
+      if (g.boss.ring && g.boss.ring.active) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(197,107,255,0.35)";
-        ctx.lineWidth = 4;
-        ctx.arc(b.ring.x, b.ring.y, b.ring.r, 0, Math.PI*2);
+        ctx.strokeStyle = "rgba(200,160,255,0.35)";
+        ctx.lineWidth = 3;
+        ctx.arc(g.boss.ring.x, g.boss.ring.y, g.boss.ring.r, 0, Math.PI*2);
         ctx.stroke();
+        ctx.lineWidth = 1;
       }
-
-      // HP bar
-      const bw = 240, bh = 10;
-      const bx = W - bw - 26, by = 18;
-      ctx.fillStyle = COLORS.bossHPBack;
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.fillStyle = COLORS.bossHP;
-      ctx.fillRect(bx, by, bw * (b.hp / b.hpMax), bh);
-
-      ctx.fillStyle = "rgba(255,255,255,0.88)";
-      ctx.font = "800 12px system-ui";
-      ctx.fillText(b.name, bx, by - 6);
     }
 
     // players
-    for (const pid in g.players) {
-      const p = g.players[pid];
-      const isMe = pid === myId;
-      const isActive = pid === g.turn.activeId;
+    const players = g.players || {};
+    for (const pid in players) {
+      const p = players[pid];
+      const base = charBaseHue(p.charId);
+      const tint = (p.hue || 0);
+      const mix = (base * 0.65 + tint * 0.35) % 360;
 
-      drawGlowCircle(p.x, p.y, p.r + 16, isActive ? "rgba(124,242,255,0.16)" : "rgba(255,255,255,0.12)");
       ctx.beginPath();
-      ctx.fillStyle = isMe ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.55)";
+      ctx.fillStyle = hsla(mix, 75, 60, 0.35);
       ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
       ctx.fill();
 
-      // shield ring
+      ctx.beginPath();
+      ctx.strokeStyle = hsla(mix, 80, 70, 0.65);
+      ctx.lineWidth = (pid === g.turn.activeId) ? 4 : 2;
+      ctx.arc(p.x, p.y, p.r+1, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+
+      // shield indicator
       if (p.shield) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(118,255,138,0.85)";
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(180,255,200,0.55)";
         ctx.arc(p.x, p.y, p.r + 7, 0, Math.PI*2);
         ctx.stroke();
       }
 
-      // id label
+      // name label
+      const lobbyPlayers = (snap && snap.lobby && snap.lobby.players) ? snap.lobby.players : [];
+      const found = lobbyPlayers.find(x => x.id === pid);
+      const label = found ? found.name : pid;
+
       ctx.fillStyle = "rgba(255,255,255,0.85)";
       ctx.font = "12px system-ui";
-      ctx.fillText(pid, p.x - 14, p.y - p.r - 6);
-
-      // active turn marker
-      if (isActive) {
-        ctx.fillStyle = "rgba(124,242,255,0.95)";
-        ctx.font = "900 11px system-ui";
-        ctx.fillText("TURN", p.x - 16, p.y + p.r + 14);
-      }
+      ctx.textAlign = "center";
+      ctx.fillText(label, p.x, p.y - p.r - 10);
     }
 
     // aim line
-    if (dragging && pointerDown && canActNow()) {
-      const me = myPlayer();
-      if (me) {
-        const dx = dragStart.x - dragNow.x;
-        const dy = dragStart.y - dragNow.y;
-        const n = norm(dx, dy);
-        const pull = clamp(n.l, 0, 170);
-        const endX = me.x + n.x * (pull * 1.5);
-        const endY = me.y + n.y * (pull * 1.5);
-
-        ctx.save();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = "rgba(180,255,220,0.35)";
+    if (dragging && isMyTurn()) {
+      const p = myPlayer();
+      if (p) {
         ctx.beginPath();
-        ctx.moveTo(me.x, me.y);
-        ctx.lineTo(endX, endY);
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(dragNow.x, dragNow.y);
         ctx.stroke();
-        ctx.fillStyle = "rgba(180,255,220,0.95)";
-        ctx.beginPath();
-        ctx.arc(endX, endY, 5, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
       }
     }
 
-    ctx.restore(); // shake end
+    ctx.restore();
 
     // HUD
-    const isMyTurn = (g.turn.activeId === myId);
     const me = myPlayer();
-    const charName = me ? (CHARACTERS.find(x => x.id === me.charId)?.name || me.charId) : "-";
+    const turn = g.turn;
+    const lobbyPlayers = snap && snap.lobby ? snap.lobby.players : [];
+    const myLobby = lobbyPlayers.find(x => x.id === myId);
+    const myLabel = myLobby ? myLobby.name : (myName || myId || "-");
 
-    const dashTxt = me ? `Dash: ${me.dashCharges}` : "Dash: -";
-    const shieldTxt = me ? (me.shield ? "Shield: ON" : "Shield: OFF") : "Shield: -";
-    const coinsTxt = me ? `Coins: ${me.coins}` : "Coins: -";
-    const scoreTxt = me ? `Score: ${me.score}` : "Score: -";
+    const modeName = (g.mode === "boss") ? "Boss Rush" : "Obstacle Race";
+    const activeLobby = lobbyPlayers.find(x => x.id === turn.activeId);
+    const activeName = activeLobby ? activeLobby.name : turn.activeId;
 
-    const hint = g.hint ? `<br><b>Hint:</b> ${g.hint}` : "";
+    hud.innerHTML = `
+      <div style="font-weight:800; font-size:16px;">Forest Flick</div>
+      <div>Mode: ${modeName}</div>
+      <div>Round: ${g.round}</div>
+      <div style="margin-top:6px;">You: ${myLabel}</div>
+      <div>Character: ${me ? me.charId : "-"}</div>
+      <div>Coins: ${me ? me.coins : 0}</div>
+      <div>Score: ${me ? me.score : 0}</div>
+      <div>Dash: ${me ? me.dashCharges : 0}</div>
+      <div>Shield: ${me && me.shield ? "ON" : "OFF"}</div>
+      <div style="margin-top:6px;"><b>Turn:</b> ${activeName} (${turn.state}, ${Math.ceil(turn.msLeft/1000)}s)</div>
+      <div class="sub" style="margin-top:8px;">${g.hint || ""}</div>
+    `;
 
-    hud.innerHTML =
-      `<b>Forest Flick</b><br>` +
-      `Mode: ${g.mode === "boss" ? "Boss Rush" : "Obstacle Race"}<br>` +
-      `Round: ${g.round}<br>` +
-      `You: ${myId || "-"}<br>` +
-      `Character: ${charName}<br>` +
-      `${coinsTxt}<br>` +
-      `${scoreTxt}<br>` +
-      `${dashTxt}<br>` +
-      `${shieldTxt}<br>` +
-      `<b>Turn:</b> ${g.turn.activeId} (${g.turn.state}, ${Math.ceil(g.turn.msLeft/1000)}s)` +
-      hint +
-      `<div class="small">If it is your turn: drag from your ball to aim, release to flick. During movement: Space or tap to dash if you have charges.</div>`;
-
-    // winner overlay
-    if (g.phase === "round_end") {
-      ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = "rgba(255,255,255,0.95)";
-      ctx.font = "900 34px system-ui";
-      const text = (g.mode === "race") ? "ROUND OVER" : "BOSS DOWN";
-      ctx.fillText(text, 360, 250);
-      ctx.font = "600 16px system-ui";
-      ctx.fillStyle = "rgba(255,255,255,0.86)";
-      ctx.fillText("Next round starts automatically...", 360, 280);
-      ctx.restore();
-    }
+    requestAnimationFrame(draw);
   }
+
+  // start rendering
+  connectIfNeeded();
+  requestAnimationFrame(draw);
 })();
 </script>
 </body>
