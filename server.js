@@ -11,162 +11,196 @@ const wss = new WebSocket.Server({ server });
 
 const rooms = new Map();
 
-function randId() {
+const PLAYER_HP = 3;
+
+function id() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
-function roomCode() {
+function code() {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
 }
-function send(ws, msg) {
-  if (ws.readyState === 1) ws.send(JSON.stringify(msg));
+function send(ws, o) {
+  if (ws.readyState === 1) ws.send(JSON.stringify(o));
 }
-function broadcast(room, msg) {
-  room.clients.forEach(ws => send(ws, msg));
+function broadcast(room, o) {
+  room.clients.forEach(ws => send(ws, o));
 }
 
 function makeRoom(code) {
   return {
     code,
-    clients: new Map(), // ws -> player
-    hostId: null,
-    lobby: {
-      started: false,
-      players: {}, // id -> {id,name,char,ready}
-      mode: "race"
-    },
+    clients: new Map(),
+    host: null,
+    lobby: { started:false, players:{} },
     game: null
   };
 }
 
-function buildMaze(game) {
-  game.walls = [
-    { x: 20, y: 20, w: 920, h: 16 },
-    { x: 20, y: 504, w: 920, h: 16 },
-    { x: 20, y: 20, w: 16, h: 500 },
-    { x: 924, y: 20, w: 16, h: 500 },
+/* ---------- MAPS ---------- */
 
-    { x: 180, y: 40, w: 24, h: 460 },
-    { x: 360, y: 40, w: 24, h: 360 },
-    { x: 540, y: 140, w: 24, h: 360 },
-    { x: 720, y: 40, w: 24, h: 360 },
+function raceMap() {
+  return {
+    walls: [
+      {x:20,y:20,w:920,h:16},{x:20,y:504,w:920,h:16},
+      {x:20,y:20,w:16,h:500},{x:924,y:20,w:16,h:500},
 
-    { x: 60, y: 120, w: 280, h: 24 },
-    { x: 240, y: 260, w: 280, h: 24 },
-    { x: 420, y: 180, w: 280, h: 24 },
-    { x: 420, y: 360, w: 280, h: 24 }
-  ];
+      {x:160,y:40,w:24,h:460},
+      {x:340,y:40,w:24,h:360},
+      {x:520,y:140,w:24,h:360},
+      {x:700,y:40,w:24,h:360},
 
-  game.finish = { x: 780, y: 420, w: 120, h: 80 };
+      {x:60,y:120,w:260,h:24},
+      {x:240,y:260,w:260,h:24},
+      {x:420,y:180,w:260,h:24},
+      {x:420,y:360,w:260,h:24}
+    ],
+    finish:{x:780,y:420,w:120,h:80}
+  };
 }
 
+function bossMap() {
+  return {
+    walls:[
+      {x:20,y:20,w:920,h:16},{x:20,y:504,w:920,h:16},
+      {x:20,y:20,w:16,h:500},{x:924,y:20,w:16,h:500},
+      {x:300,y:120,w:360,h:24},
+      {x:300,y:396,w:360,h:24}
+    ]
+  };
+}
+
+/* ---------- GAME ---------- */
+
 function makeGame(players) {
+  const order = Object.keys(players);
   const game = {
+    mode: "race",
     turn: 0,
-    order: Object.keys(players),
-    players: {},
-    walls: [],
-    finish: null
+    bossTurnCounter: 0,
+    order,
+    players:{},
+    boss:null,
+    map:null
   };
 
   let y = 260;
-  for (const id of game.order) {
-    game.players[id] = {
-      x: 80,
-      y,
-      vx: 0,
-      vy: 0,
-      r: 18
+  for (const pid of order) {
+    game.players[pid] = {
+      id:pid,
+      name:players[pid].name,
+      x:80,y,
+      vx:0,vy:0,
+      r:18,
+      hp:PLAYER_HP,
+      color:players[pid].color
     };
-    y += 50;
+    y+=50;
   }
 
-  buildMaze(game);
+  game.map = raceMap();
   return game;
 }
 
-wss.on("connection", ws => {
-  ws.player = null;
-  ws.room = null;
+function startBoss(game) {
+  game.mode = "boss";
+  game.map = bossMap();
+  game.boss = {
+    hp:5,
+    x:600,y:260,r:40
+  };
+  game.bossTurnCounter = 0;
+}
 
-  ws.on("message", buf => {
-    let msg;
-    try { msg = JSON.parse(buf); } catch { return; }
+/* ---------- SOCKET ---------- */
 
-    if (msg.t === "create") {
-      const code = roomCode();
-      const room = makeRoom(code);
-      rooms.set(code, room);
-      send(ws, { t: "created", code });
+wss.on("connection", ws=>{
+  ws.room=null; ws.player=null;
+
+  ws.on("message", buf=>{
+    let m; try{m=JSON.parse(buf)}catch{return};
+
+    if(m.t==="create"){
+      const c=code();
+      const r=makeRoom(c);
+      rooms.set(c,r);
+      send(ws,{t:"created",code:c});
       return;
     }
 
-    if (msg.t === "join") {
-      const code = msg.code.toUpperCase();
-      if (!rooms.has(code)) rooms.set(code, makeRoom(code));
-      const room = rooms.get(code);
+    if(m.t==="join"){
+      const c=m.code.toUpperCase();
+      if(!rooms.has(c)) rooms.set(c,makeRoom(c));
+      const r=rooms.get(c);
 
-      const id = randId();
-      const player = {
-        id,
-        name: msg.name || "Player",
-        char: "agouti",
-        ready: false
+      const pid=id();
+      const player={
+        id:pid,
+        name:m.name||"Player",
+        ready:false,
+        color:`hsl(${Math.random()*360},70%,60%)`
       };
 
-      room.clients.set(ws, player);
-      room.lobby.players[id] = player;
-      if (!room.hostId) room.hostId = id;
+      r.clients.set(ws,player);
+      r.lobby.players[pid]=player;
+      if(!r.host) r.host=pid;
 
-      ws.player = player;
-      ws.room = room;
-
-      broadcast(room, { t: "lobby", room });
+      ws.room=r; ws.player=player;
+      broadcast(r,{t:"lobby",room:r});
       return;
     }
 
-    if (!ws.room) return;
+    if(!ws.room) return;
+    const r=ws.room;
+    const p=ws.player;
 
-    const room = ws.room;
-    const player = ws.player;
-
-    if (msg.t === "pick") {
-      player.char = msg.char;
-      broadcast(room, { t: "lobby", room });
+    if(m.t==="ready"){
+      p.ready=m.v;
+      broadcast(r,{t:"lobby",room:r});
     }
 
-    if (msg.t === "ready") {
-      player.ready = msg.v;
-      broadcast(room, { t: "lobby", room });
+    if(m.t==="start"){
+      if(p.id!==r.host) return;
+      if(!Object.values(r.lobby.players).every(x=>x.ready)) return;
+      r.lobby.started=true;
+      r.game=makeGame(r.lobby.players);
+      broadcast(r,{t:"game",game:r.game});
     }
 
-    if (msg.t === "start") {
-      if (player.id !== room.hostId) return;
-      if (!Object.values(room.lobby.players).every(p => p.ready)) return;
+    if(m.t==="flick"){
+      const g=r.game;
+      if(!g) return;
+      if(g.order[g.turn]!==p.id) return;
 
-      room.lobby.started = true;
-      room.game = makeGame(room.lobby.players);
-      broadcast(room, { t: "start", game: room.game });
-    }
+      const pl=g.players[p.id];
+      pl.vx=m.vx; pl.vy=m.vy;
 
-    if (msg.t === "flick") {
-      const g = room.game;
-      if (!g) return;
-      if (g.order[g.turn] !== player.id) return;
+      g.turn=(g.turn+1)%g.order.length;
+      g.bossTurnCounter++;
 
-      const p = g.players[player.id];
-      p.vx = msg.vx;
-      p.vy = msg.vy;
-      g.turn = (g.turn + 1) % g.order.length;
-      broadcast(room, { t: "game", game: g });
+      if(g.mode==="race" && pl.x>750){
+        startBoss(g);
+      }
+
+      if(g.mode==="boss" && g.bossTurnCounter===2){
+        g.bossTurnCounter=0;
+        const target=g.players[g.order[g.turn]];
+        target.hp--;
+        if(target.hp<=0){
+          target.hp=PLAYER_HP;
+          target.x=80; target.y=260;
+        }
+      }
+
+      broadcast(r,{t:"game",game:g});
     }
   });
 
-  ws.on("close", () => {
-    if (!ws.room) return;
+  ws.on("close",()=>{
+    if(!ws.room) return;
     ws.room.clients.delete(ws);
     delete ws.room.lobby.players[ws.player.id];
-    broadcast(ws.room, { t: "lobby", room: ws.room });
+    broadcast(ws.room,{t:"lobby",room:ws.room});
   });
 });
 
-server.listen(3000, () => console.log("Server running"));
+server.listen(3000,()=>console.log("Running on 3000"));
