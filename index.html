@@ -5,210 +5,224 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Forest Flick Multiplayer</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #070a14; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #070a14; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; color: rgba(255,255,255,0.92); }
     .wrap { display: grid; place-items: center; height: 100%; }
-    canvas {
-      background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14);
-      border-radius: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-      touch-action: none;
-    }
+    canvas { background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14); border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); touch-action: none; }
 
     .hud {
-      position: fixed; left: 16px; top: 12px; color: rgba(255,255,255,0.92);
+      position: fixed; left: 16px; top: 12px;
       font-size: 14px; line-height: 1.35;
-      background: rgba(10,12,20,0.55);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 14px;
-      padding: 10px 12px;
-      min-width: 260px;
+      padding: 10px 12px; border-radius: 12px;
+      background: rgba(10,14,30,0.58);
+      border: 1px solid rgba(255,255,255,0.10);
       backdrop-filter: blur(10px);
+      max-width: 330px;
     }
-    .toast {
-      position: fixed; left: 50%; top: 18px; transform: translateX(-50%);
-      padding: 10px 14px;
-      background: rgba(0,0,0,0.65);
-      color: rgba(255,255,255,0.92);
-      border: 1px solid rgba(255,255,255,0.16);
+    .pillrow { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      padding: 6px 10px;
       border-radius: 999px;
-      display: none;
-      user-select: none;
-      backdrop-filter: blur(10px);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      font-size: 12px;
     }
 
     .screen {
-      position: fixed; inset: 0; display: none;
-      align-items: center; justify-content: center;
-      background: radial-gradient(1000px 600px at 30% 10%, rgba(64,96,255,0.18), rgba(0,0,0,0.45));
-      padding: 22px;
+      position: fixed; inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
     }
     .screen.show { display: flex; }
+
     .panel {
-      background: rgba(10,12,20,0.72);
-      border: 1px solid rgba(255,255,255,0.10);
+      width: min(980px, 92vw);
+      padding: 18px;
       border-radius: 18px;
-      padding: 14px 14px;
-      box-shadow: 0 14px 60px rgba(0,0,0,0.55);
-      backdrop-filter: blur(14px);
+      background: rgba(10,14,30,0.60);
+      border: 1px solid rgba(255,255,255,0.10);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 18px 70px rgba(0,0,0,0.45);
     }
-    .title { font-size: 30px; font-weight: 800; color: rgba(255,255,255,0.94); }
-    .sub { color: rgba(255,255,255,0.72); margin-top: 6px; font-size: 13px; }
-    h3 { margin: 0 0 10px 0; color: rgba(255,255,255,0.92); font-size: 16px; }
 
-    .pill {
-      display: inline-flex; align-items:center; gap: 8px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(0,0,0,0.28);
-      color: rgba(255,255,255,0.86);
-      font-size: 12px;
+    .title { font-size: 36px; font-weight: 800; letter-spacing: -0.5px; margin: 2px 0 6px; }
+    .sub { opacity: 0.8; margin-bottom: 14px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.4fr 0.9fr;
+      gap: 14px;
     }
-    .inline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .box {
+      border-radius: 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 14px;
+    }
 
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     input, select {
-      background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(255,255,255,0.18);
-      color: rgba(255,255,255,0.92);
-      border-radius: 12px;
       padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.14);
+      color: rgba(255,255,255,0.92);
       outline: none;
     }
-    input::placeholder { color: rgba(255,255,255,0.40); }
+    input::placeholder { color: rgba(255,255,255,0.35); }
 
     .btn {
-      background: rgba(64,96,255,0.18);
-      border: 1px solid rgba(110,140,255,0.35);
-      color: rgba(255,255,255,0.92);
-      border-radius: 12px;
       padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(80,120,255,0.16);
+      border: 1px solid rgba(120,160,255,0.35);
+      color: rgba(255,255,255,0.92);
       cursor: pointer;
-      transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
       user-select: none;
+      transition: transform 0.05s ease, filter 0.12s ease, background 0.12s ease;
     }
-    .btn:hover { background: rgba(64,96,255,0.26); border-color: rgba(140,170,255,0.50); }
-    .btn:active { transform: scale(0.98); background: rgba(64,96,255,0.34); }
-    .btn.clicked { outline: 2px solid rgba(255,255,255,0.25); }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn:hover { filter: brightness(1.12); }
+    .btn:active { transform: translateY(1px) scale(0.99); filter: brightness(1.25); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 
-    .row2 { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 14px; width: 920px; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-    .card {
-      border-radius: 16px;
-      padding: 12px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(0,0,0,0.24);
-      cursor: pointer;
-      transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease;
-      min-height: 106px;
+    .small { font-size: 12px; opacity: 0.75; }
+
+    .chargrid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
     }
-    .card:hover { transform: translateY(-1px); border-color: rgba(150,180,255,0.38); }
-    .card.sel { border-color: rgba(120,160,255,0.75); background: rgba(64,96,255,0.14); }
-    .row { display:flex; gap: 10px; align-items:center; }
+    .card {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.20);
+      border: 1px solid rgba(255,255,255,0.10);
+      cursor: pointer;
+      transition: transform 0.10s ease, border 0.15s ease, background 0.15s ease;
+    }
+    .card:hover { transform: translateY(-1px); border-color: rgba(150,200,255,0.35); }
+    .card.sel { border-color: rgba(140,220,255,0.65); background: rgba(90,140,255,0.10); }
     .avatar {
-      width: 38px; height: 38px; border-radius: 999px;
-      display:grid; place-items:center;
-      background: rgba(255,255,255,0.10);
-      border: 1px solid rgba(255,255,255,0.14);
+      width: 36px; height: 36px; border-radius: 999px;
+      display: grid; place-items: center;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
       font-weight: 800;
     }
-    .name { color: rgba(255,255,255,0.92); font-weight: 800; }
-    .tag { color: rgba(255,255,255,0.62); font-size: 12px; margin-top: 2px; }
-    .trait { color: rgba(255,255,255,0.72); font-size: 12px; margin-top: 8px; line-height: 1.3; }
+    .name { font-weight: 800; }
+    .tag {
+      font-size: 11px;
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-top: 4px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.10);
+      opacity: 0.92;
+    }
+    .trait { margin-top: 8px; font-size: 12px; opacity: 0.8; }
 
-    .btnRow { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .toast {
+      position: fixed; bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(10,14,30,0.72);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(10px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+    .toast.show { opacity: 1; }
   </style>
 </head>
 <body>
+  <div class="hud" id="hud">
+    <div style="font-weight:800">Forest Flick</div>
+    <div id="hudLine1" class="small">Connecting...</div>
+    <div class="pillrow">
+      <div class="pill" id="pillRoom">Room: -</div>
+      <div class="pill" id="pillYou">You: -</div>
+      <div class="pill" id="pillHost">Host: -</div>
+    </div>
+    <div style="margin-top:10px" class="small" id="hudHelp"></div>
+  </div>
+
   <div class="wrap">
     <canvas id="c" width="960" height="540"></canvas>
   </div>
 
-  <div class="hud" id="hud"></div>
-  <div class="toast" id="toast"></div>
-
   <div class="screen show" id="lobbyScreen">
-    <div style="width: 920px;">
+    <div class="panel">
       <div class="title">Forest Flick Multiplayer</div>
       <div class="sub">Turn based. One flick per turn. Physics resolves, then next player goes. Race mode or Boss co-op mode.</div>
 
-      <div class="sub inline" style="margin-top:10px;">
-        <span class="pill" id="roomPill">Room: none</span>
-        <span class="pill" id="youPill">You: -</span>
-        <span class="pill" id="hostPill">Host: -</span>
-      </div>
-
-      <div class="panel" style="max-width: 920px; margin-top: 12px;">
-        <h3>Join a Room</h3>
-        <div class="inline">
-          <input id="nameInput" placeholder="Your name (shown to others)" maxlength="18" />
-          <input id="roomInput" placeholder="Room code (ex TT12)" maxlength="6" />
+      <div class="box" style="margin-bottom:14px">
+        <div style="font-weight:800; margin-bottom:10px">Join a Room</div>
+        <div class="row">
+          <input id="nameInput" placeholder="Your name (ex Kayden)" style="min-width:180px" />
+          <input id="roomInput" placeholder="Room code (ex TT12)" style="min-width:140px; text-transform:uppercase" />
           <button class="btn" id="joinBtn">Join</button>
           <button class="btn" id="createBtn">Create</button>
         </div>
-        <div class="sub" style="margin-top:10px;">Friends can join by opening the same link and entering the same room code.</div>
+        <div class="small" style="margin-top:8px">Friends can join by opening the same link and entering the same room code.</div>
       </div>
 
-      <div class="row2" style="margin-top:14px;">
-        <div class="panel">
-          <h3>Choose Your Forest Friend</h3>
-          <div class="grid" id="charGrid"></div>
+      <div class="grid">
+        <div class="box">
+          <div style="font-weight:800">Choose Your Forest Friend</div>
+          <div class="chargrid" id="charGrid"></div>
         </div>
 
-        <div class="panel">
-          <h3>Lobby</h3>
-          <div class="sub" id="rosterText">Players: -</div>
-          <div class="sub" id="readyText">Ready: -</div>
+        <div class="box">
+          <div style="font-weight:800; margin-bottom:10px">Lobby</div>
+          <div class="small" id="rosterText">Players: -</div>
+          <div class="small" id="readyText" style="margin-top:6px">Ready: -</div>
 
-          <div class="sub" style="margin-top:10px;">
-            <span class="pill" id="modePill">Mode: -</span>
-          </div>
+          <div style="margin-top:12px" class="pill" id="modePill">Mode: -</div>
 
-          <div class="inline" style="margin-top:10px;">
-            <select id="modeSelect">
+          <div class="row" style="margin-top:10px">
+            <select id="modeSel">
               <option value="race">Obstacle Race</option>
-              <option value="boss">Boss Rush</option>
+              <option value="boss">Boss Co-op</option>
             </select>
             <button class="btn" id="setModeBtn">Set Mode (Host)</button>
           </div>
 
-          <div class="btnRow">
-            <button class="btn" id="readyBtn" disabled>Ready</button>
-            <button class="btn" id="startBtn" disabled>Start (Host)</button>
-            <button class="btn" id="resetBtn" disabled>Reset (Host)</button>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="readyBtn">Ready</button>
+            <button class="btn" id="startBtn">Start (Host)</button>
+            <button class="btn" id="resetBtn">Reset (Host)</button>
           </div>
 
-          <div class="btnRow">
-            <button class="btn" id="reloadMapBtn" disabled>Reload Map (Host)</button>
-            <button class="btn" id="resetPosBtn" disabled>Reset Positions (Host)</button>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="reloadMapBtn">Reload Map (Host)</button>
+            <button class="btn" id="resetPosBtn">Reset Positions (Host)</button>
           </div>
 
-          <div class="sub">Everyone must pick a character and Ready before Host can Start.</div>
+          <div class="small" style="margin-top:10px">Everyone must pick a character and Ready before Host can Start.</div>
         </div>
       </div>
 
-      <div class="sub" style="margin-top:12px;">
-        Controls during your turn: drag from your player to aim, release to flick. While moving, press Space or tap to dash if you have dash charges.
+      <div class="small" style="margin-top:10px">
+        Controls during your turn: drag to aim, release to flick. While moving, press Space or tap to dash if you have dash charges.
       </div>
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
 <script>
-(() => {
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
-
-  const hud = document.getElementById("hud");
-  const toast = document.getElementById("toast");
+  const W = canvas.width, H = canvas.height;
 
   const lobbyScreen = document.getElementById("lobbyScreen");
-  const roomPill = document.getElementById("roomPill");
-  const youPill = document.getElementById("youPill");
-  const hostPill = document.getElementById("hostPill");
-  const modePill = document.getElementById("modePill");
-
-  const nameInput = document.getElementById("nameInput");
   const roomInput = document.getElementById("roomInput");
+  const nameInput = document.getElementById("nameInput");
   const joinBtn = document.getElementById("joinBtn");
   const createBtn = document.getElementById("createBtn");
 
@@ -216,15 +230,37 @@
   const rosterText = document.getElementById("rosterText");
   const readyText = document.getElementById("readyText");
 
-  const modeSelect = document.getElementById("modeSelect");
+  const modeSel = document.getElementById("modeSel");
   const setModeBtn = document.getElementById("setModeBtn");
-
   const readyBtn = document.getElementById("readyBtn");
   const startBtn = document.getElementById("startBtn");
   const resetBtn = document.getElementById("resetBtn");
-
   const reloadMapBtn = document.getElementById("reloadMapBtn");
   const resetPosBtn = document.getElementById("resetPosBtn");
+
+  const modePill = document.getElementById("modePill");
+
+  const pillRoom = document.getElementById("pillRoom");
+  const pillYou = document.getElementById("pillYou");
+  const pillHost = document.getElementById("pillHost");
+
+  const hudLine1 = document.getElementById("hudLine1");
+  const hudHelp = document.getElementById("hudHelp");
+
+  const toastEl = document.getElementById("toast");
+
+  function showToast(msg, ms=1200) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toastEl.classList.remove("show"), ms);
+  }
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function norm(x,y){
+    const l = Math.hypot(x,y) || 1;
+    return { x: x/l, y: y/l, l };
+  }
 
   const CHARACTERS = [
     { id:"agouti", name:"Agouti", avatar:"A", tag:"Power", desc:"First launch each round is stronger." },
@@ -233,80 +269,69 @@
     { id:"manicou", name:"Manicou", avatar:"M", tag:"Safety", desc:"Starts with a shield each round (blocks one trap hit)." },
   ];
 
-  function nrm(x,y){
-    const l = Math.hypot(x,y);
-    return l > 0 ? {x:x/l,y:y/l,l} : {x:0,y:0,l:0};
-  }
+  const COLORS = [
+    "rgba(255,145,90,0.95)",
+    "rgba(90,220,255,0.95)",
+    "rgba(170,120,255,0.95)",
+    "rgba(120,255,160,0.95)",
+  ];
 
-  function showToast(msg, ms=1600) {
-    if (!msg) return;
-    toast.textContent = msg;
-    toast.style.display = "block";
-    clearTimeout(showToast._t);
-    showToast._t = setTimeout(() => toast.style.display = "none", ms);
-  }
-
-  function clickFlash(btn) {
-    btn.classList.add("clicked");
-    setTimeout(() => btn.classList.remove("clicked"), 220);
-  }
-
-  // networking
-  let ws = null;
+  let ws;
   let myId = null;
-  let roomCode = null;
   let hostId = null;
-  let snap = null;
+  let roomCode = null;
 
-  // local selection
   let myPick = null;
   let myReady = false;
-  let myName = "";
+
+  let snap = null;
 
   function wsUrl() {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
+    const proto = (location.protocol === "https:") ? "wss" : "ws";
     return `${proto}://${location.host}`;
   }
 
-  function connectIfNeeded() {
-    if (ws && ws.readyState === 1) return;
-
+  function connect() {
     ws = new WebSocket(wsUrl());
+    ws.onopen = () => { hudLine1.textContent = "Connected. Join or Create a room."; };
+    ws.onclose = () => { hudLine1.textContent = "Disconnected. Refresh to reconnect."; };
+    ws.onerror = () => { hudLine1.textContent = "WebSocket error."; };
+
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
 
       if (msg.t === "created") {
         roomInput.value = msg.code;
-        showToast("Room created: " + msg.code, 2000);
+        showToast("Room code created: " + msg.code, 1400);
+        return;
       }
 
       if (msg.t === "joined") {
         myId = msg.id;
-        roomCode = msg.code;
         hostId = msg.hostId;
-        roomPill.textContent = "Room: " + roomCode;
-        youPill.textContent = "You: " + myId;
-        hostPill.textContent = "Host: " + hostId;
-        readyBtn.disabled = false;
+        roomCode = msg.code;
 
-        // send name immediately
-        myName = (nameInput.value || "").trim();
-        if (!myName) myName = "Player " + myId.slice(0,4);
-        send({ t:"set_name", name: myName });
+        pillRoom.textContent = "Room: " + roomCode;
+        pillYou.textContent = "You: " + myId;
+        pillHost.textContent = "Host: " + hostId;
 
-        renderLobbyButtons();
+        hudLine1.textContent = "Joined room. Pick a character and Ready.";
+        return;
       }
 
-      if (msg.t === "err") showToast(msg.m || "Error");
+      if (msg.t === "err") {
+        showToast("Error: " + msg.m, 1600);
+        return;
+      }
 
       if (msg.t === "snap") {
         snap = msg;
-        hostId = msg.room.hostId;
-        hostPill.textContent = "Host: " + hostId;
+
+        hostId = msg.room?.hostId || hostId;
+        pillHost.textContent = "Host: " + (hostId || "-");
 
         renderLobbyButtons();
-
-        if (snap.game && snap.game.toast) showToast(snap.game.toast, 1500);
+        return;
       }
     };
   }
@@ -316,81 +341,95 @@
     ws.send(JSON.stringify(obj));
   }
 
-  createBtn.onclick = () => {
-    clickFlash(createBtn);
-    connectIfNeeded();
-    setTimeout(() => send({ t:"create" }), 50);
-  };
+  function safeName() {
+    const raw = (nameInput.value || "").trim();
+    return raw ? raw.slice(0, 14) : "Player";
+  }
 
   joinBtn.onclick = () => {
-    clickFlash(joinBtn);
-    const code = roomInput.value.trim().toUpperCase();
-    if (!code) { showToast("Enter a room code"); return; }
-    connectIfNeeded();
-    setTimeout(() => send({ t:"join", code }), 50);
+    const code = (roomInput.value || "").trim().toUpperCase();
+    if (!code) return showToast("Enter a room code first", 1200);
+    send({ t:"join", code, name: safeName() });
+    showToast("Joining...", 800);
   };
 
+  createBtn.onclick = () => {
+    send({ t:"create" });
+    showToast("Creating...", 800);
+  };
+
+  // host controls
   setModeBtn.onclick = () => {
-    clickFlash(setModeBtn);
-    if (!snap || !snap.lobby) return;
-    if (myId !== hostId) { showToast("Only host can set mode"); return; }
-    send({ t:"set_mode", mode: modeSelect.value });
+    if (myId !== hostId) return;
+    send({ t:"set_mode", mode: modeSel.value === "boss" ? "boss" : "race" });
+    showToast("Mode set", 800);
   };
 
   readyBtn.onclick = () => {
-    clickFlash(readyBtn);
-    if (!roomCode) { showToast("Join a room first"); return; }
-    if (!myPick) { showToast("Pick a character first"); return; }
+    if (!myId) return;
     myReady = !myReady;
     send({ t:"ready", v: myReady });
+    readyBtn.textContent = myReady ? "Unready" : "Ready";
+    showToast(myReady ? "Ready!" : "Not ready", 800);
   };
 
   startBtn.onclick = () => {
-    clickFlash(startBtn);
     if (myId !== hostId) return;
     send({ t:"start" });
+    showToast("Starting...", 1000);
   };
 
   resetBtn.onclick = () => {
-    clickFlash(resetBtn);
     if (myId !== hostId) return;
     send({ t:"reset" });
     myReady = false;
+    readyBtn.textContent = "Ready";
+    showToast("Reset", 900);
   };
 
   reloadMapBtn.onclick = () => {
-    clickFlash(reloadMapBtn);
     if (myId !== hostId) return;
-    send({ t:"host_reload_map" });
+    send({ t:"reload_map" });
+    showToast("Reloading map...", 900);
   };
 
   resetPosBtn.onclick = () => {
-    clickFlash(resetPosBtn);
     if (myId !== hostId) return;
-    send({ t:"host_reset_positions" });
+    send({ t:"reset_positions" });
+    showToast("Resetting positions...", 900);
   };
+
+  // If name changes after joining, update server
+  nameInput.addEventListener("change", () => {
+    if (!myId) return;
+    send({ t:"set_name", name: safeName() });
+    showToast("Name updated", 900);
+  });
 
   function renderLobbyButtons() {
     const isHost = (myId && hostId && myId === hostId);
     setModeBtn.disabled = !isHost;
     startBtn.disabled = !isHost;
     resetBtn.disabled = !isHost;
-    reloadMapBtn.disabled = !isHost || !(snap && snap.lobby && snap.lobby.started);
-    resetPosBtn.disabled = !isHost || !(snap && snap.lobby && snap.lobby.started);
+    reloadMapBtn.disabled = !isHost;
+    resetPosBtn.disabled = !isHost;
 
-    if (snap && snap.lobby) {
-      modePill.textContent = "Mode: " + (snap.lobby.mode === "boss" ? "Boss Rush" : "Obstacle Race");
+    if (!snap || !snap.lobby) return;
 
-      const players = snap.lobby.players || [];
-      const names = players.map(p => `${p.name} (${p.id})`);
-      rosterText.textContent = "Players: " + (names.length ? names.join(", ") : "-");
+    modePill.textContent = "Mode: " + (snap.lobby.mode === "boss" ? "Boss Co-op" : "Obstacle Race");
+    modeSel.value = (snap.lobby.mode === "boss") ? "boss" : "race";
 
-      const readyPairs = players.map(p => `${p.name} ${p.ready ? "[Ready]" : "[Not Ready]"} (${p.pick})`);
-      readyText.textContent = "Ready: " + (readyPairs.length ? readyPairs.join(" | ") : "-");
-
-      if (snap.lobby.started) lobbyScreen.classList.remove("show");
-      else lobbyScreen.classList.add("show");
+    const players = snap.lobby.players || [];
+    if (!players.length) {
+      rosterText.textContent = "Players: -";
+      readyText.textContent = "Ready: -";
+    } else {
+      rosterText.textContent = "Players: " + players.map(p => `${p.name}`).join(", ");
+      readyText.textContent = "Ready: " + players.map(p => `${p.name} ${p.ready ? "[Ready]" : "[Not Ready]"} (${p.pick})`).join(" | ");
     }
+
+    if (snap.lobby.started) lobbyScreen.classList.remove("show");
+    else lobbyScreen.classList.add("show");
   }
 
   function buildCharacterUI() {
@@ -411,290 +450,282 @@
       el.onclick = () => {
         myPick = c.id;
         myReady = false;
+        readyBtn.textContent = "Ready";
         for (const node of charGrid.children) node.classList.remove("sel");
         el.classList.add("sel");
         send({ t:"pick", charId: c.id });
         send({ t:"ready", v: false });
-        showToast(`${c.name} selected`, 1000);
+        showToast(`${c.name} selected`, 900);
       };
       charGrid.appendChild(el);
     }
   }
   buildCharacterUI();
 
-  // Input for turn actions
+  // Input: make it forgiving
   let pointerDown = false;
-  let dragging = false;
-  let dragStart = {x:0,y:0};
   let dragNow = {x:0,y:0};
+  let dragFrom = {x:0,y:0};
+  let dragging = false;
 
   function getPos(e) {
     const r = canvas.getBoundingClientRect();
     const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
     const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
-    return {
-      x: (clientX - r.left) * (canvas.width / r.width),
-      y: (clientY - r.top) * (canvas.height / r.height)
-    };
+    return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
+  }
+
+  function canActNow() {
+    if (!snap || !snap.game) return false;
+    if (snap.game.phase !== "play") return false;
+    if (snap.game.turn.state !== "aim") return false;
+    return snap.game.turn.activeId === myId;
   }
 
   function myPlayer() {
-    if (!snap || !snap.game || !snap.game.players) return null;
-    return snap.game.players[myId] || null;
+    if (!snap || !snap.game) return null;
+    return snap.game.players?.[myId] || null;
   }
 
-  function isMyTurn() {
-    return snap && snap.game && snap.game.turn && snap.game.turn.activeId === myId && snap.game.turn.state === "aim";
-  }
+  canvas.addEventListener("pointerdown", (e) => {
+    if (lobbyScreen.classList.contains("show")) return;
+    if (!canActNow()) return;
 
-  function down(e) {
-    if (!isMyTurn()) return;
-    const p = myPlayer();
-    if (!p) return;
-    const pos = getPos(e);
-    const d = Math.hypot(pos.x - p.x, pos.y - p.y);
-    if (d > p.r + 28) return; // must start drag near your ball
+    const me = myPlayer();
+    if (!me) return;
+
     pointerDown = true;
     dragging = true;
-    dragStart = pos;
-    dragNow = pos;
-    e.preventDefault();
-  }
 
-  function move(e) {
-    if (!dragging) return;
+    // Always drag from your ball center, not where you clicked
+    dragFrom = { x: me.x, y: me.y };
     dragNow = getPos(e);
-    e.preventDefault();
-  }
+  });
 
-  function up(e) {
-    if (!dragging) return;
-    dragging = false;
+  canvas.addEventListener("pointermove", (e) => {
+    if (!pointerDown) return;
+    dragNow = getPos(e);
+  });
+
+  window.addEventListener("pointerup", () => {
+    if (!pointerDown) return;
     pointerDown = false;
 
-    const p = myPlayer();
-    if (!p) return;
+    if (!dragging) return;
+    if (!canActNow()) { dragging = false; return; }
 
-    const dx = dragStart.x - dragNow.x;
-    const dy = dragStart.y - dragNow.y;
-    const v = nrm(dx, dy);
+    const dx = dragFrom.x - dragNow.x;
+    const dy = dragFrom.y - dragNow.y;
+    const n = norm(dx, dy);
 
-    // power
-    const power = clamp(v.l * 6.0, 0, 1200);
-    const vx = v.x * power;
-    const vy = v.y * power;
+    const MAX_PULL = 200;
+    const FORCE_SCALE = 0.11;
+    const LAUNCH_MULT = 95;
+
+    const pull = clamp(n.l, 0, MAX_PULL);
+    if (pull < 6) { dragging = false; return; }
+
+    const power = pull * FORCE_SCALE;
+    const vx = n.x * power * LAUNCH_MULT;
+    const vy = n.y * power * LAUNCH_MULT;
 
     send({ t:"act", kind:"flick", vx, vy });
-    e.preventDefault();
+    dragging = false;
+  });
+
+  function canDashNow() {
+    if (!snap || !snap.game) return false;
+    if (snap.game.phase !== "play") return false;
+    if (snap.game.turn.activeId !== myId) return false;
+    return snap.game.turn.state === "resolving";
   }
-
-  canvas.addEventListener("mousedown", down);
-  canvas.addEventListener("mousemove", move);
-  window.addEventListener("mouseup", up);
-
-  canvas.addEventListener("touchstart", down, {passive:false});
-  canvas.addEventListener("touchmove", move, {passive:false});
-  window.addEventListener("touchend", up, {passive:false});
 
   window.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
-      if (!snap || !snap.game) return;
-      if (snap.game.turn.activeId !== myId) return;
-      if (snap.game.turn.state !== "resolving") return;
-      send({ t:"dash" });
+      if (lobbyScreen.classList.contains("show")) return;
+      if (canDashNow()) send({ t:"dash" });
     }
   });
 
-  // Rendering helpers
-  function charBaseHue(charId) {
-    if (charId === "agouti") return 32;
-    if (charId === "frog") return 115;
-    if (charId === "hummingbird") return 190;
-    if (charId === "manicou") return 285;
-    return 200;
+  canvas.addEventListener("click", () => {
+    if (lobbyScreen.classList.contains("show")) return;
+    if (canDashNow()) send({ t:"dash" });
+  });
+
+  // Draw helpers
+  function roundRect(x, y, w, h, r) {
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr, y);
+    ctx.arcTo(x+w, y, x+w, y+h, rr);
+    ctx.arcTo(x+w, y+h, x, y+h, rr);
+    ctx.arcTo(x, y+h, x, y, rr);
+    ctx.arcTo(x, y, x+w, y, rr);
+    ctx.closePath();
   }
 
-  function hsla(h,s,l,a=1){ return `hsla(${h} ${s}% ${l}% / ${a})`; }
+  function drawTextTag(x,y,text) {
+    ctx.save();
+    ctx.font = "12px system-ui";
+    const pad = 6;
+    const w = ctx.measureText(text).width + pad*2;
+    roundRect(x - w/2, y - 18, w, 18, 9);
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y - 9);
+    ctx.restore();
+  }
 
   function draw() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.clearRect(0,0,W,H);
 
-    const g = snap && snap.game;
-    if (!g) {
+    // backdrop stripes
+    ctx.fillStyle = "rgba(124,242,255,0.06)";
+    for (let i=0;i<7;i++){
+      const y = 120 + i * 55;
+      roundRect(60, y, W-120, 18, 10);
+      ctx.fill();
+    }
+
+    if (!snap || !snap.game) {
       requestAnimationFrame(draw);
       return;
     }
 
-    // camera shake
+    const g = snap.game;
+
+    // mild camera shake
     let sx = 0, sy = 0;
-    if (g.shake && g.shake > 0) {
-      sx = (Math.random()*2 - 1) * g.shake;
-      sy = (Math.random()*2 - 1) * g.shake;
+    if (g.shake && g.shake > 0.1) {
+      sx = (Math.random()*2-1) * g.shake;
+      sy = (Math.random()*2-1) * g.shake;
     }
     ctx.save();
     ctx.translate(sx, sy);
 
     // walls
-    ctx.fillStyle = "rgba(255,255,255,0.09)";
-    for (const w of g.walls) ctx.fillRect(w.x, w.y, w.w, w.h);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    for (const w of g.walls || []) ctx.fillRect(w.x, w.y, w.w, w.h);
 
     // pads
-    ctx.fillStyle = "rgba(64,96,255,0.20)";
-    for (const p of g.pads) ctx.fillRect(p.x, p.y, p.w, p.h);
-
-    // traps
-    for (const t of g.traps) {
-      ctx.beginPath();
-      ctx.fillStyle = "rgba(255,80,80,0.28)";
-      ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
-      ctx.fill();
-    }
+    ctx.fillStyle = "rgba(90,160,255,0.22)";
+    for (const p of g.pads || []) ctx.fillRect(p.x, p.y, p.w, p.h);
 
     // finish
     if (g.finish) {
-      ctx.fillStyle = "rgba(120,255,160,0.14)";
+      ctx.fillStyle = "rgba(120,255,160,0.18)";
       ctx.fillRect(g.finish.x, g.finish.y, g.finish.w, g.finish.h);
-      ctx.strokeStyle = "rgba(120,255,160,0.28)";
+      ctx.strokeStyle = "rgba(120,255,160,0.50)";
       ctx.strokeRect(g.finish.x, g.finish.y, g.finish.w, g.finish.h);
     }
 
     // coins
-    for (const c of g.coins) {
+    for (const c of g.coins || []) {
       if (c.takenBy) continue;
       ctx.beginPath();
-      ctx.fillStyle = "rgba(255,220,120,0.30)";
+      ctx.fillStyle = "rgba(255,211,106,0.70)";
       ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
       ctx.fill();
     }
 
     // items
-    for (const it of g.items) {
+    for (const it of g.items || []) {
       if (it.takenBy) continue;
       ctx.beginPath();
-      if (it.type === "dash") ctx.fillStyle = "rgba(120,200,255,0.34)";
-      else if (it.type === "shield") ctx.fillStyle = "rgba(180,255,200,0.30)";
-      else if (it.type === "magnet") ctx.fillStyle = "rgba(255,160,220,0.30)";
-      else if (it.type === "stone") ctx.fillStyle = "rgba(255,255,255,0.18)";
-      else ctx.fillStyle = "rgba(255,255,255,0.18)";
-      ctx.arc(it.x, it.y, it.r, 0, Math.PI*2);
+      if (it.type === "dash") ctx.fillStyle = "rgba(90,220,255,0.75)";
+      else if (it.type === "shield") ctx.fillStyle = "rgba(170,120,255,0.75)";
+      else if (it.type === "magnet") ctx.fillStyle = "rgba(255,145,90,0.75)";
+      else ctx.fillStyle = "rgba(255,255,255,0.30)";
+      ctx.arc(it.x, it.y, it.r || 12, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // traps
+    for (const t of g.traps || []) {
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(255,90,110,0.55)";
+      ctx.arc(t.x, t.y, t.r, 0, Math.PI*2);
       ctx.fill();
     }
 
     // boss
     if (g.boss) {
       ctx.beginPath();
-      ctx.fillStyle = "rgba(255,255,255,0.14)";
+      ctx.fillStyle = "rgba(220,220,240,0.22)";
       ctx.arc(g.boss.x, g.boss.y, g.boss.r, 0, Math.PI*2);
       ctx.fill();
 
-      // weak spot glow arc
-      if (g.boss.rules && g.boss.rules.includes("WEAKSPOT_CYCLE")) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(120,255,220,0.55)";
-        ctx.lineWidth = 6;
-        const a0 = g.boss.weakAngle - (g.boss.weakArc * 0.5);
-        const a1 = g.boss.weakAngle + (g.boss.weakArc * 0.5);
-        ctx.arc(g.boss.x, g.boss.y, g.boss.r + 7, a0, a1);
-        ctx.stroke();
-        ctx.lineWidth = 1;
-      }
+      ctx.strokeStyle = "rgba(255,255,255,0.22)";
+      ctx.stroke();
 
-      // parry ring
-      if (g.boss.ring && g.boss.ring.active) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(200,160,255,0.35)";
-        ctx.lineWidth = 3;
-        ctx.arc(g.boss.ring.x, g.boss.ring.y, g.boss.ring.r, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.lineWidth = 1;
-      }
+      drawTextTag(g.boss.x, g.boss.y - g.boss.r - 10, `${g.boss.name} HP ${Math.ceil(g.boss.hp)}/${g.boss.hpMax}`);
     }
 
     // players
     const players = g.players || {};
-    for (const pid in players) {
+    for (const pid of Object.keys(players)) {
       const p = players[pid];
-      const base = charBaseHue(p.charId);
-      const tint = (p.hue || 0);
-      const mix = (base * 0.65 + tint * 0.35) % 360;
+      const col = COLORS[(p.colorIndex || 0) % COLORS.length];
 
+      // body
       ctx.beginPath();
-      ctx.fillStyle = hsla(mix, 75, 60, 0.35);
+      ctx.fillStyle = col;
       ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
       ctx.fill();
 
-      ctx.beginPath();
-      ctx.strokeStyle = hsla(mix, 80, 70, 0.65);
-      ctx.lineWidth = (pid === g.turn.activeId) ? 4 : 2;
-      ctx.arc(p.x, p.y, p.r+1, 0, Math.PI*2);
-      ctx.stroke();
-      ctx.lineWidth = 1;
-
-      // shield indicator
+      // shield ring
       if (p.shield) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(180,255,200,0.55)";
-        ctx.arc(p.x, p.y, p.r + 7, 0, Math.PI*2);
+        ctx.strokeStyle = "rgba(170,120,255,0.70)";
+        ctx.lineWidth = 3;
+        ctx.arc(p.x, p.y, p.r + 6, 0, Math.PI*2);
         ctx.stroke();
+        ctx.lineWidth = 1;
       }
 
-      // name label
-      const lobbyPlayers = (snap && snap.lobby && snap.lobby.players) ? snap.lobby.players : [];
-      const found = lobbyPlayers.find(x => x.id === pid);
-      const label = found ? found.name : pid;
-
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.font = "12px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(label, p.x, p.y - p.r - 10);
+      // name tag
+      drawTextTag(p.x, p.y - p.r - 10, p.name || pid);
     }
 
-    // aim line
-    if (dragging && isMyTurn()) {
-      const p = myPlayer();
-      if (p) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(dragNow.x, dragNow.y);
-        ctx.stroke();
-      }
+    // aim line for your turn
+    if (pointerDown && dragging && canActNow()) {
+      ctx.beginPath();
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 2;
+      ctx.moveTo(dragFrom.x, dragFrom.y);
+      ctx.lineTo(dragNow.x, dragNow.y);
+      ctx.stroke();
+      ctx.lineWidth = 1;
     }
 
     ctx.restore();
 
-    // HUD
+    // HUD text
     const me = myPlayer();
-    const turn = g.turn;
-    const lobbyPlayers = snap && snap.lobby ? snap.lobby.players : [];
-    const myLobby = lobbyPlayers.find(x => x.id === myId);
-    const myLabel = myLobby ? myLobby.name : (myName || myId || "-");
+    const modeName = (g.mode === "boss") ? "Boss Co-op" : "Obstacle Race";
+    hudLine1.textContent = `Mode: ${modeName} | Round: ${g.round} | Level: ${g.levelId}`;
+    if (me) {
+      hudHelp.innerHTML =
+        `<div class="small">You: <b>${me.name || myId}</b> | Character: ${me.charId}</div>` +
+        `<div class="small">Coins: ${me.coins} | Score: ${me.score} | Dash: ${me.dashCharges} | Shield: ${me.shield ? "ON" : "OFF"}</div>` +
+        `<div class="small">Turn: <b>${g.turn.activeId}</b> (${g.turn.state}, ${Math.ceil(g.turn.msLeft/1000)}s)</div>` +
+        `<div class="small" style="margin-top:6px">${g.hint || ""}</div>`;
+    } else {
+      hudHelp.textContent = "";
+    }
 
-    const modeName = (g.mode === "boss") ? "Boss Rush" : "Obstacle Race";
-    const activeLobby = lobbyPlayers.find(x => x.id === turn.activeId);
-    const activeName = activeLobby ? activeLobby.name : turn.activeId;
-
-    hud.innerHTML = `
-      <div style="font-weight:800; font-size:16px;">Forest Flick</div>
-      <div>Mode: ${modeName}</div>
-      <div>Round: ${g.round}</div>
-      <div style="margin-top:6px;">You: ${myLabel}</div>
-      <div>Character: ${me ? me.charId : "-"}</div>
-      <div>Coins: ${me ? me.coins : 0}</div>
-      <div>Score: ${me ? me.score : 0}</div>
-      <div>Dash: ${me ? me.dashCharges : 0}</div>
-      <div>Shield: ${me && me.shield ? "ON" : "OFF"}</div>
-      <div style="margin-top:6px;"><b>Turn:</b> ${activeName} (${turn.state}, ${Math.ceil(turn.msLeft/1000)}s)</div>
-      <div class="sub" style="margin-top:8px;">${g.hint || ""}</div>
-    `;
+    if (g.toast) showToast(g.toast, 900);
 
     requestAnimationFrame(draw);
   }
 
-  // start rendering
-  connectIfNeeded();
-  requestAnimationFrame(draw);
-})();
+  connect();
+  draw();
 </script>
 </body>
 </html>
