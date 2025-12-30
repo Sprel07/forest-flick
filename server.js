@@ -79,7 +79,7 @@ function makeGame(mode, playerIds, picks) {
     turnIndex: 0,
     turnOrder: [...playerIds],
     turnState: "aim", // aim | resolving
-    turnMsLeft: 25000, // 25s per turn, resets each turn
+    turnMsLeft: 25000, // 25s per turn
     activeId: playerIds[0],
 
     // world
@@ -99,9 +99,6 @@ function makeGame(mode, playerIds, picks) {
     players: {}, // pid -> playerState
     boss: null,
 
-    // boss roster
-    bossIndex: 0,
-
     // messaging
     hint: "",
     toast: "",
@@ -117,7 +114,6 @@ function makeGame(mode, playerIds, picks) {
     game.players[pid] = makePlayer(pid, charId, 120, startY + (i - playerIds.length / 2) * 44);
   }
 
-  // build first stage
   if (mode === "race") buildRaceLevel(game, game.levelId);
   else buildBossRound(game);
 
@@ -131,23 +127,19 @@ function makePlayer(pid, charId, x, y) {
     charId,
     x, y, vx: 0, vy: 0, r: 18,
 
-    // per round stats
     firstLaunchAvailable: true,
     dashCharges: 0,
     shield: false,
     magnetT: 0,
 
-    // turn action
     canDashThisTurn: false,
     dashUsedThisTurn: false,
     dashStrikeWindow: 0,
 
-    // scoring
     score: 0,
     coins: 0,
     finished: false,
 
-    // physics tuning
     bounceKeep: 0.78,
     friction: 0.985,
   };
@@ -182,61 +174,6 @@ function baseBounds(game) {
   ];
 }
 
-// -------------------------
-// RACE MAPS (LONG / COMPLEX)
-// -------------------------
-
-const RACE_LEVELS = ["cocorite_cove", "maracas_bounce", "caroni_corridors"];
-
-function _mergeRects(rects) {
-  rects.sort((a, b) => (a.y - b.y) || (a.h - b.h) || (a.x - b.x));
-  const out = [];
-  for (const r of rects) {
-    const last = out[out.length - 1];
-    if (last && last.y === r.y && last.h === r.h && (last.x + last.w) >= r.x) {
-      const nx2 = Math.max(last.x + last.w, r.x + r.w);
-      last.w = nx2 - last.x;
-    } else out.push({ ...r });
-  }
-  out.sort((a, b) => (a.x - b.x) || (a.w - b.w) || (a.y - b.y));
-  const out2 = [];
-  for (const r of out) {
-    const last = out2[out2.length - 1];
-    if (last && last.x === r.x && last.w === r.w && (last.y + last.h) >= r.y) {
-      const ny2 = Math.max(last.y + last.h, r.y + r.h);
-      last.h = ny2 - last.y;
-    } else out2.push({ ...r });
-  }
-  return out2;
-}
-
-function addMazeFromAscii(game, ascii, opt = {}) {
-  const cell = opt.cell || 64;
-  const b = game.bounds;
-
-  const rows = ascii.length;
-  const cols = Math.max(...ascii.map(s => s.length));
-
-  const totalW = cols * cell;
-  const totalH = rows * cell;
-
-  const x0 = b.x + Math.max(0, Math.floor((b.w - totalW) / 2));
-  const y0 = b.y + Math.max(0, Math.floor((b.h - totalH) / 2));
-
-  const rects = [];
-  for (let r = 0; r < rows; r++) {
-    const row = ascii[r];
-    for (let c = 0; c < cols; c++) {
-      const ch = row[c] || " ";
-      if (ch === "X") rects.push({ x: x0 + c * cell, y: y0 + r * cell, w: cell, h: cell });
-    }
-  }
-
-  const thick = opt.thick || 18;
-  const thickRects = rects.map(w => ({ x: w.x - thick / 2, y: w.y - thick / 2, w: w.w + thick, h: w.h + thick }));
-  return _mergeRects(thickRects);
-}
-
 function buildRaceLevel(game, levelId) {
   game.levelId = levelId;
   game.boss = null;
@@ -251,145 +188,30 @@ function buildRaceLevel(game, levelId) {
   game.coins = [];
   game.items = [];
 
-  if (levelId === "cocorite_cove") {
-    const ascii = [
-      "XXXXXXXXXXXXXXXX",
-      "X....X.....X...X",
-      "X.XX.X.XXX.X.X.XX",
-      "X.X..X...X...X..X",
-      "X.X.XXX.X.XXXXX.X",
-      "X...X...X.....X.X",
-      "XXX.X.XXXXX.XXX.XX",
-      "X...X.....X...X..X",
-      "X.XXXXX.X.XXX.XX.X",
-      "X.....X.X...X....X",
-      "X.XXX.X.XXX.XXXX.X",
-      "X...X.....X......X",
-      "XXXXXXXXXXXXXXXX"
-    ];
-    game.walls.push(...addMazeFromAscii(game, ascii, { cell: 54, thick: 20 }));
-    game.finish = { x: game.W - 165, y: 48, w: 120, h: 90 };
+  // Keep your existing simple race for now (since you said things are working now)
+  // You can swap this for your longer maze maps after lobby is stable.
 
-    game.pads = [
-      { x: 160, y: 250, w: 120, h: 16 },
-      { x: 420, y: 465, w: 140, h: 16 },
-      { x: 720, y: 300, w: 150, h: 16 },
-    ];
+  game.walls.push({ x: 220, y: 130, w: 260, h: 24 });
+  game.walls.push({ x: 300, y: 320, w: 330, h: 24 });
+  game.walls.push({ x: 610, y: 170, w: 24, h: 220 });
 
-    game.traps = [
-      { x: 310, y: 160, r: 14 },
-      { x: 540, y: 250, r: 14 },
-      { x: 650, y: 430, r: 14 },
-    ];
+  game.finish = { x: game.W - 170, y: 90, w: 110, h: 80 };
 
-    game.coins = [
-      { x: 155, y: 95 }, { x: 190, y: 430 }, { x: 300, y: 470 },
-      { x: 460, y: 120 }, { x: 515, y: 410 }, { x: 620, y: 95 },
-      { x: 735, y: 165 }, { x: 790, y: 465 }, { x: 850, y: 260 },
-    ].map(c => ({ ...c, r: 10, takenBy: null }));
+  game.coins = [
+    { x: 200, y: 90 }, { x: 240, y: 440 }, { x: 520, y: 90 },
+    { x: 520, y: 440 }, { x: 720, y: 360 }, { x: 760, y: 220 }
+  ].map(c => ({ ...c, r: 10, takenBy: null }));
 
-    game.items = [
-      { type: "dash", x: 260, y: 95, r: 12, takenBy: null },
-      { type: "shield", x: 510, y: 470, r: 12, takenBy: null },
-      { type: "magnet", x: 790, y: 165, r: 12, takenBy: null },
-      { type: "dash", x: 745, y: 465, r: 12, takenBy: null },
-    ];
-  } else if (levelId === "maracas_bounce") {
-    const ascii = [
-      "XXXXXXXXXXXXXXXX",
-      "X....X.....X...X",
-      "X.XX.X.XXX.X.X.XX",
-      "X.X..X...X...X..X",
-      "X.X.XXX.X.XXX.X.XX",
-      "X...X...X...X...XX",
-      "XXX.X.XXXXX.X.XX.X",
-      "X...X.....X.X..X.X",
-      "X.XXXXX.XXX.XX.X.X",
-      "X.....X.....X....X",
-      "X.XXX.XXXXXXX.XX.X",
-      "X...X.........X..X",
-      "XXXXXXXXXXXXXXXX"
-    ];
-    game.walls.push(...addMazeFromAscii(game, ascii, { cell: 54, thick: 20 }));
-    game.finish = { x: game.W - 165, y: 392, w: 120, h: 90 };
+  game.traps = [{ x: 450, y: 250, r: 14 }];
+  game.pads = [{ x: 140, y: 250, w: 90, h: 16 }, { x: 690, y: 440, w: 120, h: 16 }];
 
-    game.pads = [
-      { x: 140, y: 250, w: 130, h: 16 },
-      { x: 330, y: 120, w: 150, h: 16 },
-      { x: 500, y: 420, w: 150, h: 16 },
-      { x: 710, y: 250, w: 160, h: 16 },
-    ];
+  game.items = [
+    { type: "dash", x: 640, y: 95, r: 12, takenBy: null },
+    { type: "shield", x: 255, y: 380, r: 12, takenBy: null },
+    { type: "magnet", x: 760, y: 430, r: 12, takenBy: null },
+  ];
 
-    game.traps = [
-      { x: 360, y: 250, r: 14 },
-      { x: 600, y: 250, r: 14 },
-      { x: 760, y: 120, r: 14 },
-      { x: 760, y: 420, r: 14 },
-    ];
-
-    game.coins = [
-      { x: 165, y: 120 }, { x: 165, y: 420 }, { x: 300, y: 250 },
-      { x: 430, y: 95 }, { x: 430, y: 465 }, { x: 560, y: 250 },
-      { x: 700, y: 95 }, { x: 700, y: 465 }, { x: 850, y: 250 },
-    ].map(c => ({ ...c, r: 10, takenBy: null }));
-
-    game.items = [
-      { type: "dash", x: 330, y: 120, r: 12, takenBy: null },
-      { type: "shield", x: 500, y: 420, r: 12, takenBy: null },
-      { type: "magnet", x: 700, y: 95, r: 12, takenBy: null },
-      { type: "dash", x: 710, y: 250, r: 12, takenBy: null },
-    ];
-  } else if (levelId === "caroni_corridors") {
-    const ascii = [
-      "XXXXXXXXXXXXXXXXXXXX",
-      "X....X.....X.......X",
-      "X.XX.X.XXX.X.XXXXX.XX",
-      "X.X..X...X...X...X..X",
-      "X.X.XXX.X.XXXXX.X.XX.X",
-      "X...X...X.....X.X....X",
-      "XXX.X.XXXXX.XXX.XXXXXX",
-      "X...X.....X...X......X",
-      "X.XXXXX.X.XXX.XXXXXX.X",
-      "X.....X.X...X....X...X",
-      "X.XXX.X.XXX.XXXX.X.XX.X",
-      "X...X.....X......X...X",
-      "X.XXXXXXX.XXXXXXXXX.XX",
-      "X.......X...........X",
-      "XXXXXXXXXXXXXXXXXXXX"
-    ];
-    game.walls.push(...addMazeFromAscii(game, ascii, { cell: 46, thick: 22 }));
-    game.finish = { x: game.W - 175, y: 230, w: 130, h: 95 };
-
-    game.pads = [
-      { x: 160, y: 250, w: 140, h: 16 },
-      { x: 420, y: 250, w: 140, h: 16 },
-      { x: 660, y: 250, w: 160, h: 16 },
-    ];
-
-    game.traps = [
-      { x: 280, y: 120, r: 14 },
-      { x: 280, y: 420, r: 14 },
-      { x: 520, y: 250, r: 14 },
-      { x: 760, y: 250, r: 14 },
-    ];
-
-    game.coins = [
-      { x: 155, y: 95 }, { x: 185, y: 455 }, { x: 310, y: 250 },
-      { x: 420, y: 95 }, { x: 450, y: 465 }, { x: 545, y: 250 },
-      { x: 650, y: 95 }, { x: 690, y: 465 }, { x: 800, y: 250 },
-      { x: 865, y: 120 }, { x: 865, y: 420 },
-    ].map(c => ({ ...c, r: 10, takenBy: null }));
-
-    game.items = [
-      { type: "dash", x: 310, y: 250, r: 12, takenBy: null },
-      { type: "shield", x: 545, y: 250, r: 12, takenBy: null },
-      { type: "magnet", x: 865, y: 120, r: 12, takenBy: null },
-      { type: "dash", x: 865, y: 420, r: 12, takenBy: null },
-    ];
-  } else {
-    return buildRaceLevel(game, "caroni_corridors");
-  }
-
+  // reset players positions and perks
   const ids = game.turnOrder;
   const startY = game.H / 2;
   for (let i = 0; i < ids.length; i++) {
@@ -401,10 +223,9 @@ function buildRaceLevel(game, levelId) {
   }
   resetRoundPerks(game);
 
-  game.hint = "Race to the finish. Long corridors, multiple routes. One flick per turn.";
+  game.hint = "Race to the finish. One flick per turn. First to touch wins.";
 }
 
-// Boss code left as-is (you said boulder boss is lame, but that requires design changes, not a bug fix)
 function buildBossRound(game) {
   game.finish = null;
   game.walls = baseBounds(game);
@@ -417,6 +238,7 @@ function buildBossRound(game) {
   game.turnState = "aim";
   game.turnMsLeft = 25000;
 
+  // Placeholder boss arena (keep stable)
   game.walls.push({ x: 220, y: 90, w: 24, h: 340 });
   game.walls.push({ x: 340, y: 150, w: 260, h: 24 });
   game.walls.push({ x: 340, y: 346, w: 260, h: 24 });
@@ -430,10 +252,8 @@ function buildBossRound(game) {
   ].map(c => ({ ...c, r: 10, takenBy: null }));
 
   game.boss = null;
-  game.hint = "Boss mode placeholder. We'll replace the boulder boss with something better next.";
-  game.toast = "Boss mode placeholder.";
-  game.shake = 0;
-  game.shakeT = 0;
+  game.hint = "Boss mode placeholder.";
+  game.toast = "";
 
   const ids = game.turnOrder;
   const startY = game.H / 2;
@@ -445,6 +265,14 @@ function buildBossRound(game) {
     p.finished = false;
   }
   resetRoundPerks(game);
+}
+
+function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
+  const nx = clamp(cx, rx, rx + rw);
+  const ny = clamp(cy, ry, ry + rh);
+  const dx = cx - nx;
+  const dy = cy - ny;
+  return dx * dx + dy * dy <= cr * cr;
 }
 
 function resolveCircleRect(p, w) {
@@ -474,14 +302,6 @@ function resolveCircleRect(p, w) {
     p.vx *= 0.90;
     p.vy *= 0.90;
   }
-}
-
-function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
-  const nx = clamp(cx, rx, rx + rw);
-  const ny = clamp(cy, ry, ry + rh);
-  const dx = cx - nx;
-  const dy = cy - ny;
-  return dx * dx + dy * dy <= cr * cr;
 }
 
 function clampSpeed(p, maxSp) {
@@ -516,7 +336,7 @@ function stepGame(game, dt) {
       pl.x += pl.vx * dt;
       pl.y += pl.vy * dt;
 
-      // safety snap-back if player leaves arena (prevents "lost forever")
+      // safety snap-back if player leaves arena
       const bx0 = game.bounds.x - 220, by0 = game.bounds.y - 220;
       const bx1 = game.bounds.x + game.bounds.w + 220, by1 = game.bounds.y + game.bounds.h + 220;
       if (pl.x < bx0 || pl.x > bx1 || pl.y < by0 || pl.y > by1) {
@@ -619,9 +439,7 @@ function nextRound(game) {
   game.turnMsLeft = 25000;
 
   if (game.mode === "race") {
-    const idx = Math.max(0, RACE_LEVELS.indexOf(game.levelId));
-    const next = RACE_LEVELS[(idx + 1) % RACE_LEVELS.length];
-    buildRaceLevel(game, next);
+    buildRaceLevel(game, game.levelId);
   } else {
     buildBossRound(game);
   }
@@ -630,6 +448,9 @@ function nextRound(game) {
 function makeSnapshot(room) {
   const game = room.game;
   const lobby = room.lobby;
+
+  // FIX: room.clients is a Map, use Array.from(room.clients.values())
+  const playerIds = Array.from(room.clients.values());
 
   return {
     t: "snap",
@@ -640,7 +461,7 @@ function makeSnapshot(room) {
       mode: lobby.mode,
       picks: lobby.picks,
       ready: lobby.ready,
-      players: Object.values(room.clients),
+      players: playerIds,
       maxPlayers: lobby.maxPlayers,
     },
     game: game ? {
@@ -716,6 +537,7 @@ wss.on("connection", (ws) => {
     let msg;
     try { msg = JSON.parse(buf.toString()); } catch { return; }
 
+    // Create room
     if (msg.t === "create") {
       const code = makeRoomCode();
       const room = makeRoom(code);
@@ -724,6 +546,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Join room
     if (msg.t === "join") {
       const code = String(msg.code || "").trim().toUpperCase().slice(0, 6);
       if (!code) return send(ws, { t: "err", m: "No room code." });
@@ -751,6 +574,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    // Must be in a room for everything else
     const room = ws.roomCode ? getRoom(ws.roomCode) : null;
     if (!room) return;
 
@@ -786,7 +610,8 @@ wss.on("connection", (ws) => {
       if (pid !== room.hostId) return;
       if (room.lobby.started) return;
 
-      const ids = Object.values(room.clients);
+      // FIX: Map values
+      const ids = Array.from(room.clients.values());
       if (ids.length < 1) return;
 
       for (const id of ids) {
@@ -834,8 +659,11 @@ wss.on("connection", (ws) => {
       if (pid !== room.hostId) return;
       room.lobby.started = false;
       room.game = null;
+
+      // FIX: rebuild ready for Map values
       room.lobby.ready = {};
-      for (const id of Object.values(room.clients)) room.lobby.ready[id] = false;
+      for (const id of Array.from(room.clients.values())) room.lobby.ready[id] = false;
+
       broadcast(room, makeSnapshot(room));
       return;
     }
@@ -851,9 +679,10 @@ wss.on("connection", (ws) => {
     delete room.lobby.picks[pid];
     delete room.lobby.ready[pid];
 
+    // host migration
     if (pid === room.hostId) {
-      const next = room.clients.values().next().value || null;
-      room.hostId = next;
+      const nextPid = room.clients.values().next().value || null; // Map values are pids
+      room.hostId = nextPid;
     }
 
     if (room.game && room.game.players[pid]) {
