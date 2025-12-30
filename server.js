@@ -60,7 +60,6 @@ function makeRoom(code) {
     // game state
     game: null, // built on start
     lastTick: nowMs(),
-    accum: 0,
     lastSnap: 0,
   };
 }
@@ -94,7 +93,7 @@ function makeGame(mode, playerIds, picks) {
     pads: [],
     traps: [],
     coins: [],
-    items: [], // dash orb, shield leaf, magnet fruit, boulder spawn etc
+    items: [],
 
     // entities
     players: {}, // pid -> playerState
@@ -122,17 +121,11 @@ function makeGame(mode, playerIds, picks) {
   if (mode === "race") buildRaceLevel(game, game.levelId);
   else buildBossRound(game);
 
-  // hint for first stage
   if (mode === "race") game.hint = "Race to the finish. One flick per turn. First to touch wins.";
   return game;
 }
 
 function makePlayer(pid, charId, x, y) {
-  // All characters unlocked, and each has one passive trait
-  // Agouti: first launch boost per round
-  // Tree Frog: higher bounce keep
-  // Hummingbird: 1 dash charge per round by default
-  // Manicou: 1 shield blocks first trap hit per round
   const p = {
     id: pid,
     charId,
@@ -147,7 +140,7 @@ function makePlayer(pid, charId, x, y) {
     // turn action
     canDashThisTurn: false,
     dashUsedThisTurn: false,
-    dashStrikeWindow: 0, // seconds, enables dash damage when > 0
+    dashStrikeWindow: 0,
 
     // scoring
     score: 0,
@@ -159,11 +152,9 @@ function makePlayer(pid, charId, x, y) {
     friction: 0.985,
   };
 
-  // traits
   if (charId === "frog") p.bounceKeep = 0.90;
   else p.bounceKeep = 0.78;
 
-  // start of round perks applied in resetRoundPerks
   return p;
 }
 
@@ -176,10 +167,7 @@ function resetRoundPerks(game) {
     p.dashUsedThisTurn = false;
     p.dashStrikeWindow = 0;
 
-    // Hummingbird starts with 1 dash charge each round
     p.dashCharges = (p.charId === "hummingbird") ? 1 : 0;
-
-    // Manicou starts with shield each round
     p.shield = (p.charId === "manicou");
   }
 }
@@ -201,8 +189,6 @@ function baseBounds(game) {
 const RACE_LEVELS = ["cocorite_cove", "maracas_bounce", "caroni_corridors"];
 
 function _mergeRects(rects) {
-  // merge collinear rects for fewer collision checks
-  // 1) merge horizontal (same y,h) by x overlap/touch
   rects.sort((a, b) => (a.y - b.y) || (a.h - b.h) || (a.x - b.x));
   const out = [];
   for (const r of rects) {
@@ -212,7 +198,6 @@ function _mergeRects(rects) {
       last.w = nx2 - last.x;
     } else out.push({ ...r });
   }
-  // 2) merge vertical (same x,w) by y overlap/touch
   out.sort((a, b) => (a.x - b.x) || (a.w - b.w) || (a.y - b.y));
   const out2 = [];
   for (const r of out) {
@@ -238,7 +223,6 @@ function addMazeFromAscii(game, ascii, opt = {}) {
   const x0 = b.x + Math.max(0, Math.floor((b.w - totalW) / 2));
   const y0 = b.y + Math.max(0, Math.floor((b.h - totalH) / 2));
 
-  // translate X blocks into rects
   const rects = [];
   for (let r = 0; r < rows; r++) {
     const row = ascii[r];
@@ -248,10 +232,8 @@ function addMazeFromAscii(game, ascii, opt = {}) {
     }
   }
 
-  // corridor feel: expand walls a bit (thicker)
   const thick = opt.thick || 18;
   const thickRects = rects.map(w => ({ x: w.x - thick / 2, y: w.y - thick / 2, w: w.w + thick, h: w.h + thick }));
-
   return _mergeRects(thickRects);
 }
 
@@ -269,11 +251,7 @@ function buildRaceLevel(game, levelId) {
   game.coins = [];
   game.items = [];
 
-  // These are intentionally longer, corridor-heavy maps.
-  // The "finish" is always far right, but reaching it requires navigation.
-
   if (levelId === "cocorite_cove") {
-    // Long corridor maze (intro but still substantial)
     const ascii = [
       "XXXXXXXXXXXXXXXX",
       "X....X.....X...X",
@@ -290,7 +268,6 @@ function buildRaceLevel(game, levelId) {
       "XXXXXXXXXXXXXXXX"
     ];
     game.walls.push(...addMazeFromAscii(game, ascii, { cell: 54, thick: 20 }));
-
     game.finish = { x: game.W - 165, y: 48, w: 120, h: 90 };
 
     game.pads = [
@@ -318,7 +295,6 @@ function buildRaceLevel(game, levelId) {
       { type: "dash", x: 745, y: 465, r: 12, takenBy: null },
     ];
   } else if (levelId === "maracas_bounce") {
-    // Still bounce-focused, but now a long looped track with detours
     const ascii = [
       "XXXXXXXXXXXXXXXX",
       "X....X.....X...X",
@@ -335,10 +311,8 @@ function buildRaceLevel(game, levelId) {
       "XXXXXXXXXXXXXXXX"
     ];
     game.walls.push(...addMazeFromAscii(game, ascii, { cell: 54, thick: 20 }));
-
     game.finish = { x: game.W - 165, y: 392, w: 120, h: 90 };
 
-    // more pads, because this map wants ricochet/bounce play
     game.pads = [
       { x: 140, y: 250, w: 130, h: 16 },
       { x: 330, y: 120, w: 150, h: 16 },
@@ -366,7 +340,6 @@ function buildRaceLevel(game, levelId) {
       { type: "dash", x: 710, y: 250, r: 12, takenBy: null },
     ];
   } else if (levelId === "caroni_corridors") {
-    // Big maze closest to your reference image: thick corridors, long pathing
     const ascii = [
       "XXXXXXXXXXXXXXXXXXXX",
       "X....X.....X.......X",
@@ -385,7 +358,6 @@ function buildRaceLevel(game, levelId) {
       "XXXXXXXXXXXXXXXXXXXX"
     ];
     game.walls.push(...addMazeFromAscii(game, ascii, { cell: 46, thick: 22 }));
-
     game.finish = { x: game.W - 175, y: 230, w: 130, h: 95 };
 
     game.pads = [
@@ -415,11 +387,9 @@ function buildRaceLevel(game, levelId) {
       { type: "dash", x: 865, y: 420, r: 12, takenBy: null },
     ];
   } else {
-    // fallback to the longest map
     return buildRaceLevel(game, "caroni_corridors");
   }
 
-  // reset players positions and perks
   const ids = game.turnOrder;
   const startY = game.H / 2;
   for (let i = 0; i < ids.length; i++) {
@@ -434,57 +404,7 @@ function buildRaceLevel(game, levelId) {
   game.hint = "Race to the finish. Long corridors, multiple routes. One flick per turn.";
 }
 
-const BOSS_DEFS = [
-  // You wanted different weaknesses and hints.
-  // Weaknesses can be mixed. Each boss has a list of rules.
-  {
-    id: "moko_boulder",
-    name: "Moko Boulder Idol",
-    hp: 10,
-    rules: ["BOULDER_ONLY"],
-    hint: "Only the boulder can damage it. Flick yourself into the boulder to launch it."
-  },
-  {
-    id: "armored_crab",
-    name: "Armored Crab King",
-    hp: 12,
-    rules: ["DASH_ONLY"],
-    hint: "Only dash strikes hurt it. Use dash during your movement to ram it."
-  },
-  {
-    id: "spirit_owl",
-    name: "Spirit Owl Warden",
-    hp: 10,
-    rules: ["PARRY_ONLY"],
-    hint: "Parry the shockwave. Dash through the expanding ring at the right time."
-  },
-  {
-    id: "reef_golem",
-    name: "Reef Golem",
-    hp: 14,
-    rules: ["WEAKSPOT_CYCLE"],
-    hint: "Hit the glowing weak spot. It moves every few seconds."
-  },
-  {
-    id: "storm_manta",
-    name: "Storm Manta",
-    hp: 14,
-    rules: ["RICOCHET_REQUIRED", "WEAKSPOT_CYCLE"],
-    hint: "Boss only takes real damage after you bounce off a wall, then hit the weak glow."
-  },
-  {
-    id: "totem_jaguar",
-    name: "Totem Jaguar",
-    hp: 16,
-    rules: ["STUN_THEN_PUNISH"],
-    hint: "Stun it first. Hit two arena objects into it to drop its shield, then strike fast."
-  },
-];
-
-function pickBossByIndex(i) {
-  return BOSS_DEFS[i % BOSS_DEFS.length];
-}
-
+// Boss code left as-is (you said boulder boss is lame, but that requires design changes, not a bug fix)
 function buildBossRound(game) {
   game.finish = null;
   game.walls = baseBounds(game);
@@ -497,68 +417,24 @@ function buildBossRound(game) {
   game.turnState = "aim";
   game.turnMsLeft = 25000;
 
-  // arena walls
   game.walls.push({ x: 220, y: 90, w: 24, h: 340 });
   game.walls.push({ x: 340, y: 150, w: 260, h: 24 });
   game.walls.push({ x: 340, y: 346, w: 260, h: 24 });
   game.walls.push({ x: 600, y: 150, w: 24, h: 220 });
 
-  // pads for movement spice
   game.pads = [{ x: 120, y: 250, w: 110, h: 16 }, { x: 720, y: 250, w: 120, h: 16 }];
 
-  // coins feel
   game.coins = [
     { x: 170, y: 110 }, { x: 170, y: 410 }, { x: 520, y: 110 },
     { x: 520, y: 410 }, { x: 780, y: 150 }, { x: 780, y: 370 }
   ].map(c => ({ ...c, r: 10, takenBy: null }));
 
-  // boss selection
-  const bdef = pickBossByIndex(game.bossIndex);
-  game.bossIndex++;
-
-  // boss entity
-  game.boss = {
-    id: bdef.id,
-    name: bdef.name,
-    rules: [...bdef.rules], // can mix and match
-    hp: bdef.hp,
-    hpMax: bdef.hp,
-    x: game.W * 0.72,
-    y: game.H * 0.50,
-    r: 44,
-    t: 0,
-
-    // for WEAKSPOT_CYCLE
-    weakAngle: 0,
-    weakArc: Math.PI / 3,
-    weakCycleS: 1.8,
-
-    // for PARRY_ONLY
-    ring: { active: false, r: 0, spd: 220, cd: 1.2, x: 0, y: 0 },
-
-    // for STUN_THEN_PUNISH
-    stunnedT: 0,
-    shielded: (bdef.rules.includes("STUN_THEN_PUNISH")),
-    stunHits: 0, // count object hits
-  };
-
-  game.hint = bdef.hint;
-  game.toast = `${bdef.name} appeared. ${bdef.hint}`;
+  game.boss = null;
+  game.hint = "Boss mode placeholder. We'll replace the boulder boss with something better next.";
+  game.toast = "Boss mode placeholder.";
   game.shake = 0;
   game.shakeT = 0;
 
-  // items depend on boss rules
-  if (game.boss.rules.includes("DASH_ONLY") || game.boss.rules.includes("PARRY_ONLY")) {
-    game.items.push({ type: "dash", x: 320, y: 110, r: 12, takenBy: null });
-    game.items.push({ type: "dash", x: 320, y: 410, r: 12, takenBy: null });
-  }
-  if (game.boss.rules.includes("BOULDER_ONLY") || game.boss.rules.includes("STUN_THEN_PUNISH")) {
-    game.items.push({ type: "boulder", x: game.W * 0.40, y: game.H * 0.50, r: 22, vx: 0, vy: 0 });
-  }
-  game.items.push({ type: "shield", x: 320, y: 250, r: 12, takenBy: null });
-  game.items.push({ type: "magnet", x: 780, y: 260, r: 12, takenBy: null });
-
-  // reset players positions and perks
   const ids = game.turnOrder;
   const startY = game.H / 2;
   for (let i = 0; i < ids.length; i++) {
@@ -569,14 +445,6 @@ function buildBossRound(game) {
     p.finished = false;
   }
   resetRoundPerks(game);
-}
-
-function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
-  const nx = clamp(cx, rx, rx + rw);
-  const ny = clamp(cy, ry, ry + rh);
-  const dx = cx - nx;
-  const dy = cy - ny;
-  return dx * dx + dy * dy <= cr * cr;
 }
 
 function resolveCircleRect(p, w) {
@@ -600,14 +468,20 @@ function resolveCircleRect(p, w) {
     p.vx = p.vx - 2 * dot * ux;
     p.vy = p.vy - 2 * dot * uy;
 
-    // keep speed but regain control faster after wall impacts
     p.vx *= p.bounceKeep;
     p.vy *= p.bounceKeep;
 
-    // extra damping on collision to stop long wobble
     p.vx *= 0.90;
     p.vy *= 0.90;
   }
+}
+
+function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
+  const nx = clamp(cx, rx, rx + rw);
+  const ny = clamp(cy, ry, ry + rh);
+  const dx = cx - nx;
+  const dy = cy - ny;
+  return dx * dx + dy * dy <= cr * cr;
 }
 
 function clampSpeed(p, maxSp) {
@@ -616,13 +490,6 @@ function clampSpeed(p, maxSp) {
     const s = maxSp / sp;
     p.vx *= s; p.vy *= s;
   }
-}
-
-function angleDiff(a, b) {
-  let d = a - b;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return d;
 }
 
 function isStopped(p) {
@@ -634,155 +501,22 @@ function applyPadBoost(p) {
   p.vy *= 1.22;
 }
 
-function applyMagnet(game, p, dt) {
-  if (p.magnetT <= 0) return;
-  const radius = 150;
-  const strength = 800; // px/s^2 feel
-  for (const c of game.coins) {
-    if (c.takenBy) continue;
-    const dx = p.x - c.x;
-    const dy = p.y - c.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0 && d < radius) {
-      const t = 1 - d / radius;
-      c.x += (dx / d) * strength * t * dt;
-      c.y += (dy / d) * strength * t * dt;
-    }
-  }
-}
-
-function bossTakeDamage(game, amount, source, hitAngle = null) {
-  const boss = game.boss;
-  if (!boss) return false;
-
-  if (boss.rules.includes("BOULDER_ONLY") && source !== "BOULDER") return false;
-  if (boss.rules.includes("DASH_ONLY") && source !== "DASH") return false;
-  if (boss.rules.includes("PARRY_ONLY") && source !== "PARRY") return false;
-
-  if (boss.rules.includes("STUN_THEN_PUNISH")) {
-    if (boss.shielded) return false;
-  }
-
-  if (boss.rules.includes("RICOCHET_REQUIRED") && source !== "RICOCHET_OK") return false;
-
-  if (boss.rules.includes("WEAKSPOT_CYCLE")) {
-    if (hitAngle == null) return false;
-    const d = Math.abs(angleDiff(hitAngle, boss.weakAngle));
-    if (d > boss.weakArc * 0.5) return false;
-  }
-
-  boss.hp = Math.max(0, boss.hp - amount);
-  game.shake = Math.max(game.shake, 12 + amount * 2);
-  game.shakeT = Math.max(game.shakeT, 0.18);
-  game.toast = "Boss hit!";
-  return true;
-}
-
-function updateBoss(game, dt) {
-  const boss = game.boss;
-  if (!boss) return;
-
-  boss.t += dt;
-
-  const tx = game.W * 0.72 + Math.sin(boss.t * 1.1) * 70;
-  const ty = game.H * 0.50 + Math.cos(boss.t * 0.9) * 70;
-  boss.x += (tx - boss.x) * 0.9 * dt;
-  boss.y += (ty - boss.y) * 0.9 * dt;
-
-  if (boss.rules.includes("WEAKSPOT_CYCLE")) {
-    const phase = Math.floor(boss.t / boss.weakCycleS) % 4;
-    boss.weakAngle = phase * (Math.PI / 2);
-  }
-
-  if (boss.rules.includes("STUN_THEN_PUNISH")) {
-    if (!boss.shielded && boss.stunnedT > 0) boss.stunnedT = Math.max(0, boss.stunnedT - dt);
-    if (boss.stunnedT <= 0 && !boss.shielded) {
-      boss.shielded = true;
-      boss.stunHits = 0;
-    }
-  }
-
-  if (boss.rules.includes("PARRY_ONLY") && boss.ring) {
-    boss.ring.cd -= dt;
-    if (!boss.ring.active && boss.ring.cd <= 0) {
-      boss.ring.active = true;
-      boss.ring.x = boss.x;
-      boss.ring.y = boss.y;
-      boss.ring.r = 10;
-      boss.ring.cd = 2.1;
-      game.toast = "Shockwave. Dash through the ring to parry.";
-    }
-    if (boss.ring.active) {
-      boss.ring.r += boss.ring.spd * dt;
-      if (boss.ring.r > 540) boss.ring.active = false;
-    }
-  }
-}
-
-function updateBoulder(game, dt) {
-  const b = game.items.find(it => it.type === "boulder");
-  if (!b) return;
-
-  b.x += (b.vx || 0) * dt;
-  b.y += (b.vy || 0) * dt;
-  b.vx *= 0.992;
-  b.vy *= 0.992;
-
-  const tmp = { x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: b.r, bounceKeep: 0.92 };
-  for (const w of game.walls) {
-    if (circleRectCollide(tmp.x, tmp.y, tmp.r, w.x, w.y, w.w, w.h)) resolveCircleRect(tmp, w);
-  }
-  b.x = tmp.x; b.y = tmp.y; b.vx = tmp.vx; b.vy = tmp.vy;
-
-  if (game.boss) {
-    const dx = b.x - game.boss.x;
-    const dy = b.y - game.boss.y;
-    const d = Math.hypot(dx, dy);
-    if (d <= b.r + game.boss.r) {
-      const sp = Math.hypot(b.vx, b.vy);
-      if (sp > 60) {
-        bossTakeDamage(game, 1, "BOULDER", Math.atan2(dy, dx));
-        b.vx *= 0.55; b.vy *= 0.55;
-        game.shake = Math.max(game.shake, 16);
-        game.shakeT = Math.max(game.shakeT, 0.20);
-        game.toast = "Boulder smash!";
-      }
-    }
-  }
-}
-
 function stepGame(game, dt) {
   if (!game) return;
-
-  if (game.shakeT > 0) game.shakeT = Math.max(0, game.shakeT - dt);
-  if (game.shakeT <= 0) game.shake *= 0.90;
 
   game.turnMsLeft -= dt * 1000;
   if (game.turnMsLeft <= 0 && game.phase === "play") {
     endTurn(game, "Time up");
   }
 
-  if (game.mode === "boss") {
-    updateBoss(game, dt);
-    updateBoulder(game, dt);
-  }
-
   if (game.turnState === "resolving" && game.phase === "play") {
-    const p = game.players[game.activeId];
-    if (!p) return;
-
     for (const pid of Object.keys(game.players)) {
       const pl = game.players[pid];
-      pl.magnetT = Math.max(0, pl.magnetT - dt);
-      if (pl.dashStrikeWindow > 0) pl.dashStrikeWindow = Math.max(0, pl.dashStrikeWindow - dt);
 
-      applyMagnet(game, pl, dt);
-
-      // integrate
       pl.x += pl.vx * dt;
       pl.y += pl.vy * dt;
 
-      // safety: if someone somehow escapes the arena (tunneling / huge velocity), snap them back
+      // safety snap-back if player leaves arena (prevents "lost forever")
       const bx0 = game.bounds.x - 220, by0 = game.bounds.y - 220;
       const bx1 = game.bounds.x + game.bounds.w + 220, by1 = game.bounds.y + game.bounds.h + 220;
       if (pl.x < bx0 || pl.x > bx1 || pl.y < by0 || pl.y > by1) {
@@ -817,87 +551,6 @@ function stepGame(game, dt) {
           pl.score += 25;
         }
       }
-
-      for (const it of game.items) {
-        if (it.takenBy) continue;
-        if (it.type === "boulder") continue;
-        const dx = pl.x - it.x, dy = pl.y - it.y;
-        if (Math.hypot(dx, dy) <= pl.r + it.r) {
-          it.takenBy = pid;
-          if (it.type === "dash") pl.dashCharges += 1;
-          if (it.type === "shield") pl.shield = true;
-          if (it.type === "magnet") pl.magnetT = 6.0;
-        }
-      }
-
-      for (const t of game.traps) {
-        const dx = pl.x - t.x, dy = pl.y - t.y;
-        if (Math.hypot(dx, dy) <= pl.r + t.r) {
-          if (pl.shield) {
-            pl.shield = false;
-          } else {
-            pl.x = 120;
-            pl.y = game.H / 2;
-            pl.vx = 0; pl.vy = 0;
-          }
-        }
-      }
-
-      const b = game.items.find(x => x.type === "boulder");
-      if (b) {
-        const dx = b.x - pl.x, dy = b.y - pl.y;
-        const d = Math.hypot(dx, dy);
-        if (d <= b.r + pl.r) {
-          const sp = Math.max(80, Math.min(360, Math.hypot(pl.vx, pl.vy)));
-          const ux = dx / (d || 1), uy = dy / (d || 1);
-          b.vx += ux * sp * 0.85;
-          b.vy += uy * sp * 0.85;
-          game.shake = Math.max(game.shake, 6);
-          game.shakeT = Math.max(game.shakeT, 0.10);
-        }
-      }
-
-      if (game.boss) {
-        const boss = game.boss;
-        const dx = pl.x - boss.x;
-        const dy = pl.y - boss.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist <= pl.r + boss.r) {
-          const ux = dx / (dist || 1), uy = dy / (dist || 1);
-          pl.vx += ux * 220;
-          pl.vy += uy * 220;
-
-          if (pl.dashStrikeWindow > 0) {
-            let source = "DASH";
-            if (boss.rules.includes("RICOCHET_REQUIRED")) source = "RICOCHET_OK";
-            const ang = Math.atan2(dy, dx);
-            bossTakeDamage(game, 1, source, ang);
-            pl.dashStrikeWindow = 0;
-          } else {
-            if (!boss.rules.includes("BOULDER_ONLY") &&
-                !boss.rules.includes("DASH_ONLY") &&
-                !boss.rules.includes("PARRY_ONLY") &&
-                !boss.rules.includes("RICOCHET_REQUIRED")) {
-              const ang = Math.atan2(dy, dx);
-              bossTakeDamage(game, 0.25, "BODY", ang);
-            }
-          }
-        }
-
-        if (boss.rules.includes("PARRY_ONLY") && boss.ring && boss.ring.active) {
-          const rx = pl.x - boss.ring.x, ry = pl.y - boss.ring.y;
-          const d = Math.hypot(rx, ry);
-          const hitRing = Math.abs(d - boss.ring.r) < 10;
-          if (hitRing && pl.dashStrikeWindow <= 0) {
-            if (pl.shield) pl.shield = false;
-            else {
-              pl.x = 120;
-              pl.y = game.H / 2;
-              pl.vx = 0; pl.vy = 0;
-            }
-          }
-        }
-      }
     }
 
     const stopped = Object.values(game.players).every(pl => isStopped(pl));
@@ -918,22 +571,10 @@ function stepGame(game, dt) {
       }
     }
   }
-
-  if (game.mode === "boss" && game.boss && game.phase === "play") {
-    if (game.boss.hp <= 0) {
-      game.phase = "round_end";
-      game.toast = "Boss defeated!";
-      for (const pid of Object.keys(game.players)) {
-        game.players[pid].coins += 40;
-        game.players[pid].score += 80;
-      }
-    }
-  }
 }
 
 function endTurn(game, reason) {
   if (game.phase !== "play") return;
-
   game.turnState = "aim";
   game.turnMsLeft = 25000;
 
@@ -965,46 +606,6 @@ function applyFlick(game, pid, vx, vy) {
   p.dashUsedThisTurn = false;
 }
 
-function applyDash(game, pid) {
-  const p = game.players[pid];
-  if (!p) return false;
-  if (!p.canDashThisTurn) return false;
-  if (p.dashUsedThisTurn) return false;
-  if (p.dashCharges <= 0) return false;
-
-  const sp = Math.hypot(p.vx, p.vy);
-  if (sp < 0.6) return false;
-
-  const ux = p.vx / (sp || 1);
-  const uy = p.vy / (sp || 1);
-
-  const dashPower = 520;
-  p.vx += ux * dashPower;
-  p.vy += uy * dashPower;
-
-  p.dashCharges -= 1;
-  p.dashUsedThisTurn = true;
-
-  p.dashStrikeWindow = 0.18;
-
-  const boss = game.boss;
-  if (boss && boss.rules.includes("PARRY_ONLY") && boss.ring && boss.ring.active) {
-    const dx = p.x - boss.ring.x;
-    const dy = p.y - boss.ring.y;
-    const dist = Math.hypot(dx, dy);
-    const within = Math.abs(dist - boss.ring.r) < 22;
-    if (within) {
-      bossTakeDamage(game, 1, "PARRY", Math.atan2(p.y - boss.y, p.x - boss.x));
-      boss.ring.active = false;
-      game.toast = "Parry! Reflected damage!";
-      game.shake = Math.max(game.shake, 16);
-      game.shakeT = Math.max(game.shakeT, 0.22);
-    }
-  }
-
-  return true;
-}
-
 function nextRound(game) {
   game.round += 1;
   game.phase = "play";
@@ -1018,7 +619,6 @@ function nextRound(game) {
   game.turnMsLeft = 25000;
 
   if (game.mode === "race") {
-    // cycle levels through the long corridor maps
     const idx = Math.max(0, RACE_LEVELS.indexOf(game.levelId));
     const next = RACE_LEVELS[(idx + 1) % RACE_LEVELS.length];
     buildRaceLevel(game, next);
@@ -1062,7 +662,7 @@ function makeSnapshot(room) {
       pads: game.pads,
       traps: game.traps,
       coins: game.coins,
-      items: game.items.map(it => it),
+      items: game.items,
 
       players: game.players,
       boss: game.boss,
@@ -1228,21 +828,6 @@ wss.on("connection", (ws) => {
         broadcast(room, makeSnapshot(room));
         return;
       }
-    }
-
-    if (msg.t === "dash") {
-      if (!room.game) return;
-      const g = room.game;
-      if (g.phase !== "play") return;
-      if (g.activeId !== pid) return;
-      if (g.turnState !== "resolving") return;
-
-      const ok = applyDash(g, pid);
-      if (ok) {
-        g.toast = "Dash!";
-        broadcast(room, makeSnapshot(room));
-      }
-      return;
     }
 
     if (msg.t === "reset") {
