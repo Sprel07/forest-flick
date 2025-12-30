@@ -1,6 +1,4 @@
 // server.js
-// Simple Express + Socket.io room server for Forest Flick
-
 const path = require("path");
 const http = require("http");
 const express = require("express");
@@ -8,14 +6,24 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
+const io = new Server(server, { cors: { origin: "*" } });
+
+const PUBLIC_DIR = path.join(__dirname, "public");
+
+// Serve static files
+app.use(express.static(PUBLIC_DIR));
+
+// Force root route to load index.html
+app.get("/", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-app.use(express.static(path.join(__dirname, "public")));
+// Optional: if you refresh on any route, still serve the app
+app.get("*", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
 
 const rooms = new Map();
-// rooms: roomId -> { players: Map(socketId -> playerData), createdAt }
 
 function safeRoomId(s) {
   return String(s || "")
@@ -46,11 +54,9 @@ io.on("connection", (socket) => {
 
   socket.on("create_room", ({ roomId, name }) => {
     const rid = safeRoomId(roomId) || ("room_" + Math.random().toString(16).slice(2, 8));
-    if (!rooms.has(rid)) {
-      rooms.set(rid, { players: new Map(), createdAt: Date.now() });
-    }
+    if (!rooms.has(rid)) rooms.set(rid, { players: new Map(), createdAt: Date.now() });
+
     socket.emit("room_created", { roomId: rid });
-    // Auto join after create
     joinRoom(socket, rid, name);
   });
 
@@ -60,39 +66,32 @@ io.on("connection", (socket) => {
       socket.emit("join_error", { message: "Invalid room name." });
       return;
     }
-    if (!rooms.has(rid)) {
-      rooms.set(rid, { players: new Map(), createdAt: Date.now() });
-    }
+    if (!rooms.has(rid)) rooms.set(rid, { players: new Map(), createdAt: Date.now() });
     joinRoom(socket, rid, name);
   });
 
-  socket.on("leave_room", () => {
-    leaveRoom(socket);
-  });
+  socket.on("leave_room", () => leaveRoom(socket));
 
   socket.on("player_state", (state) => {
     const rid = socket.data.roomId;
     if (!rid) return;
+
     const room = rooms.get(rid);
     if (!room) return;
 
     const p = room.players.get(socket.id);
     if (!p) return;
 
-    // Only accept reasonable values
-    p.x = clamp(Number(state.x) || p.x, 0, 2000);
-    p.y = clamp(Number(state.y) || p.y, 0, 2000);
-    p.vx = clamp(Number(state.vx) || 0, -2000, 2000);
-    p.vy = clamp(Number(state.vy) || 0, -2000, 2000);
+    p.x = clamp(Number(state.x) || p.x, 0, 5000);
+    p.y = clamp(Number(state.y) || p.y, 0, 5000);
+    p.vx = clamp(Number(state.vx) || 0, -5000, 5000);
+    p.vy = clamp(Number(state.vy) || 0, -5000, 5000);
     p.t = Date.now();
 
-    // Broadcast to others in room
     socket.to(rid).emit("player_state", { id: socket.id, ...p });
   });
 
-  socket.on("disconnect", () => {
-    leaveRoom(socket);
-  });
+  socket.on("disconnect", () => leaveRoom(socket));
 });
 
 function joinRoom(socket, rid, name) {
@@ -108,14 +107,10 @@ function joinRoom(socket, rid, name) {
   p.name = String(name || "Player").trim().slice(0, 18) || "Player";
   room.players.set(socket.id, p);
 
-  // Send current room snapshot to the joiner
   const snapshot = [];
-  for (const [id, data] of room.players.entries()) {
-    snapshot.push({ id, ...data });
-  }
-  socket.emit("room_joined", { roomId: rid, you: socket.id, players: snapshot });
+  for (const [id, data] of room.players.entries()) snapshot.push({ id, ...data });
 
-  // Notify others
+  socket.emit("room_joined", { roomId: rid, you: socket.id, players: snapshot });
   socket.to(rid).emit("player_joined", { id: socket.id, ...p });
 }
 
@@ -127,15 +122,12 @@ function leaveRoom(socket) {
   if (room) {
     room.players.delete(socket.id);
     socket.to(rid).emit("player_left", { id: socket.id });
-
-    // Cleanup empty rooms
     if (room.players.size === 0) rooms.delete(rid);
   }
+
   socket.leave(rid);
   socket.data.roomId = null;
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+server.listen(PORT, () => console.log("Server running on port", PORT));
