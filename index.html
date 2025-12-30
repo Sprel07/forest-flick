@@ -3,1036 +3,844 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Forest Flick</title>
+  <title>Forest Flick Multiplayer</title>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #060814; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    .topbar {
-      position: fixed; top: 10px; left: 0; right: 0;
-      display: flex; justify-content: center; z-index: 10;
-      pointer-events: none;
-    }
-    .topbarInner {
-      pointer-events: auto;
-      display: flex; gap: 10px; align-items: center;
-      background: rgba(255,255,255,0.08);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 10px;
-      padding: 8px 10px;
-      backdrop-filter: blur(8px);
-    }
-    input {
-      width: 160px;
-      padding: 6px 8px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: rgba(0,0,0,0.20);
-      color: rgba(255,255,255,0.92);
-      outline: none;
-      font-size: 13px;
-    }
-    button {
-      cursor: pointer;
-      padding: 6px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.16);
-      background: rgba(255,255,255,0.12);
-      color: rgba(255,255,255,0.92);
-      font-weight: 800;
-      font-size: 13px;
-    }
-    button:hover { background: rgba(255,255,255,0.16); }
-    .wrap { display: grid; place-items: center; height: 100%; padding-top: 56px; box-sizing: border-box; }
-    canvas {
-      width: min(92vw, 980px);
-      height: min(76vh, 600px);
-      background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14);
-      border-radius: 18px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.55);
-      touch-action: none;
-    }
-    .hud {
-      position: fixed; left: 16px; top: 70px;
-      color: rgba(255,255,255,0.92);
-      font-size: 13px; line-height: 1.35; user-select: none;
-      background: rgba(0,0,0,0.25);
-      padding: 10px 12px;
-      border-radius: 12px;
-      backdrop-filter: blur(6px);
-      max-width: 420px;
-      z-index: 9;
-    }
-    .hud b { font-weight: 900; }
-    .hud .small { opacity: 0.85; font-size: 12px; margin-top: 6px; }
+    html, body { margin:0; padding:0; height:100%; background:#070a14; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; color:rgba(255,255,255,0.92); }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 18px; }
+    h1 { margin: 0 0 4px 0; font-size: 40px; letter-spacing: 0.2px; }
+    .sub { opacity:0.85; margin-bottom: 10px; }
 
-    .toast {
-      position: fixed; right: 16px; top: 70px;
-      color: rgba(255,255,255,0.95);
-      background: rgba(0,0,0,0.35);
-      padding: 10px 12px;
-      border-radius: 12px;
-      backdrop-filter: blur(6px);
-      font-size: 13px;
-      max-width: 520px;
-      z-index: 9;
-      display: none;
+    .pillbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 14px; }
+    .pill { padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.10); font-size: 12px; opacity:0.95; }
+
+    .grid {
+      display:grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 14px;
+      align-items: start;
     }
+    .card {
+      background: radial-gradient(900px 550px at 20% 10%, rgba(70,120,255,0.14), rgba(0,0,0,0.0));
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.45);
+      backdrop-filter: blur(6px);
+    }
+    .row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
+    .row > * { flex: 0 0 auto; }
+    label { font-size: 12px; opacity:0.85; display:block; margin-bottom: 4px; }
+    input, select {
+      background: rgba(0,0,0,0.32);
+      color: rgba(255,255,255,0.92);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 10px 10px;
+      outline: none;
+      min-width: 180px;
+    }
+    input:focus, select:focus { border-color: rgba(130,160,255,0.7); }
+
+    .btn {
+      cursor:pointer;
+      border:1px solid rgba(130,160,255,0.55);
+      background: rgba(70,120,255,0.16);
+      color: rgba(255,255,255,0.95);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-weight: 700;
+      transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease;
+      user-select: none;
+    }
+    .btn:hover { background: rgba(70,120,255,0.22); border-color: rgba(130,160,255,0.75); }
+    .btn:active { transform: scale(0.98); }
+    .btn.secondary { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); font-weight: 650; }
+    .btn.danger { border-color: rgba(255,120,120,0.5); background: rgba(255,120,120,0.14); }
+    .btn:disabled { opacity: 0.45; cursor:not-allowed; }
+
+    .twoCol { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .charGrid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+    .char {
+      cursor:pointer;
+      padding: 12px;
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,0.12);
+      background: rgba(0,0,0,0.22);
+      transition: transform 0.06s ease, border-color 0.12s ease;
+      display:flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .char:hover { border-color: rgba(140,180,255,0.55); }
+    .char.selected { border-color: rgba(140,180,255,0.85); box-shadow: 0 0 0 2px rgba(140,180,255,0.20) inset; }
+    .char .icon {
+      width: 34px; height: 34px; border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.18);
+      display:grid; place-items:center;
+      font-weight: 900;
+      background: rgba(255,255,255,0.06);
+    }
+    .char .meta { line-height: 1.2; }
+    .small { font-size: 12px; opacity:0.85; }
+
+    .lobbyList { margin-top: 8px; display:flex; flex-direction:column; gap:8px; }
+    .playerRow {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.18);
+      border-radius: 12px;
+      padding: 10px 10px;
+    }
+    .playerLeft { display:flex; align-items:center; gap:10px; }
+    .dot { width: 14px; height:14px; border-radius:999px; background:#9ad; border:2px solid rgba(255,255,255,0.18); }
+    .tag { font-size: 12px; padding: 4px 8px; border-radius: 999px; border:1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); opacity:0.92; }
+
+    .hudHint { margin-top: 10px; font-size: 12px; opacity:0.82; line-height: 1.35; }
+    .toast { margin-top: 10px; font-size: 13px; opacity:0.95; }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14);
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      touch-action: none;
+      display:block;
+    }
+
+    .hidden { display:none !important; }
+    .foot { margin-top: 10px; opacity:0.8; font-size: 12px; }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <div class="topbarInner">
-      <input id="nameInp" placeholder="Your name" maxlength="18" />
-      <input id="roomInp" placeholder="Room" maxlength="24" />
-      <button id="joinBtn">Join</button>
-      <button id="createBtn">Create</button>
+  <div class="wrap">
+    <h1>Forest Flick Multiplayer</h1>
+    <div class="sub">Turn based. One flick per turn. Physics resolves, then next player goes. Race mode or Boss co-op mode.</div>
+
+    <div class="pillbar">
+      <div class="pill" id="pillRoom">Room: none</div>
+      <div class="pill" id="pillYou">You: -</div>
+      <div class="pill" id="pillHost">Host: -</div>
+      <div class="pill" id="pillWs">WS: connecting</div>
+    </div>
+
+    <div class="grid">
+      <div class="card" id="menuCard">
+        <div class="twoCol">
+          <div>
+            <label>Your name</label>
+            <input id="nameInput" placeholder="Type your name" />
+          </div>
+          <div>
+            <label>Room code</label>
+            <input id="roomInput" placeholder="EX: TT12" />
+          </div>
+        </div>
+
+        <div class="row" style="margin-top: 10px;">
+          <button class="btn secondary" id="btnCreate">Create</button>
+          <button class="btn" id="btnJoin">Join</button>
+          <span class="small" id="menuMsg"></span>
+        </div>
+
+        <div style="margin-top: 14px;">
+          <label>Choose your forest friend</label>
+          <div class="charGrid" id="charGrid"></div>
+          <div class="hudHint">Pick a character, then Ready. Host can set mode and Start.</div>
+        </div>
+      </div>
+
+      <div class="card" id="lobbyCard">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+          <div>
+            <div style="font-weight:800; font-size:18px;">Lobby</div>
+            <div class="small" id="lobbyModeText">Mode: -</div>
+            <div class="small" id="lobbyMapText">Map: -</div>
+          </div>
+          <div class="row">
+            <select id="modeSelect">
+              <option value="race">Obstacle Race</option>
+              <option value="boss">Boss Co-op</option>
+            </select>
+            <button class="btn secondary" id="btnSetMode">Set Mode (Host)</button>
+          </div>
+        </div>
+
+        <div class="lobbyList" id="lobbyList"></div>
+
+        <div class="row" style="margin-top:10px;">
+          <button class="btn" id="btnReady">Ready</button>
+          <button class="btn secondary" id="btnStart">Start (Host)</button>
+          <button class="btn danger" id="btnReset">Reset (Host)</button>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <button class="btn secondary" id="btnReloadMap">Reload Map (Host)</button>
+          <button class="btn secondary" id="btnResetPos">Reset Positions (Host)</button>
+        </div>
+
+        <div class="toast" id="toast"></div>
+        <div class="hudHint" id="hint"></div>
+      </div>
+    </div>
+
+    <div style="margin-top: 14px;">
+      <canvas id="c" width="960" height="540"></canvas>
+      <div class="foot">Controls during your turn: click and drag from your ball to aim, release to flick. During movement: Space or tap Dash button (if you have charges).</div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn secondary" id="btnDash">Dash</button>
+      </div>
     </div>
   </div>
 
-  <div class="wrap">
-    <canvas id="c" width="980" height="600"></canvas>
-  </div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
 
-  <div class="hud" id="hud"></div>
-  <div class="toast" id="toast"></div>
+  const c = $("c");
+  const ctx = c.getContext("2d");
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-  (() => {
-    // UI
-    const nameInp = document.getElementById("nameInp");
-    const roomInp = document.getElementById("roomInp");
-    const joinBtn = document.getElementById("joinBtn");
-    const createBtn = document.getElementById("createBtn");
+  const pillRoom = $("pillRoom");
+  const pillYou = $("pillYou");
+  const pillHost = $("pillHost");
+  const pillWs = $("pillWs");
 
-    const canvas = document.getElementById("c");
-    const ctx = canvas.getContext("2d");
-    const hud = document.getElementById("hud");
-    const toast = document.getElementById("toast");
+  const nameInput = $("nameInput");
+  const roomInput = $("roomInput");
+  const btnCreate = $("btnCreate");
+  const btnJoin = $("btnJoin");
+  const menuMsg = $("menuMsg");
 
-    const W = canvas.width;
-    const H = canvas.height;
+  const charGrid = $("charGrid");
 
-    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-    function norm(x,y){
-      const l = Math.hypot(x,y);
-      return l > 0 ? {x:x/l, y:y/l, l} : {x:0, y:0, l:0};
-    }
-    function rnd(a,b){ return a + Math.random()*(b-a); }
+  const modeSelect = $("modeSelect");
+  const btnSetMode = $("btnSetMode");
+  const btnReady = $("btnReady");
+  const btnStart = $("btnStart");
+  const btnReset = $("btnReset");
+  const btnReloadMap = $("btnReloadMap");
+  const btnResetPos = $("btnResetPos");
+  const lobbyList = $("lobbyList");
+  const lobbyModeText = $("lobbyModeText");
+  const lobbyMapText = $("lobbyMapText");
+  const toastEl = $("toast");
+  const hintEl = $("hint");
+  const btnDash = $("btnDash");
 
-    function showToast(msg, ms=1600){
-      toast.textContent = msg;
-      toast.style.display = "block";
-      clearTimeout(showToast._t);
-      showToast._t = setTimeout(() => toast.style.display = "none", ms);
-    }
+  // Characters
+  const CHARACTERS = [
+    { id: "agouti", label: "Agouti", key: "A", trait: "First launch each round is stronger." },
+    { id: "frog", label: "Tree Frog", key: "F", trait: "Keeps more speed on wall rebounds." },
+    { id: "hummingbird", label: "Hummingbird", key: "H", trait: "Starts with 1 dash charge each round." },
+    { id: "manicou", label: "Manicou", key: "M", trait: "Starts with a shield each round (blocks one hit)." }
+  ];
 
-    // Socket
-    const socket = window.io ? window.io() : null;
-    let connected = false;
-    let myId = null;
-    let roomId = null;
+  const PALETTE = [
+    "#7dd3fc", "#fb7185", "#a78bfa", "#fbbf24",
+    "#34d399", "#60a5fa", "#f472b6", "#fca5a5"
+  ];
 
-    // Other players (simple)
-    const others = new Map(); // id -> {name,x,y,vx,vy,r,t,rx,ry}
-    function upsertOther(p){
-      if (!p || !p.id) return;
-      if (p.id === myId) return;
-      const ex = others.get(p.id) || { rx: p.x, ry: p.y };
-      ex.name = p.name || ex.name || "Player";
-      ex.x = p.x ?? ex.x ?? 0;
-      ex.y = p.y ?? ex.y ?? 0;
-      ex.vx = p.vx ?? 0;
-      ex.vy = p.vy ?? 0;
-      ex.r = p.r ?? 16;
-      ex.t = p.t ?? Date.now();
-      if (typeof ex.rx !== "number") ex.rx = ex.x;
-      if (typeof ex.ry !== "number") ex.ry = ex.y;
-      others.set(p.id, ex);
-    }
+  // State
+  let ws = null;
+  let myId = null;
+  let roomCode = null;
+  let hostId = null;
+  let snapshot = null;
+  let selectedChar = "agouti";
+  let isReady = false;
 
-    if (socket) {
-      socket.on("connect", () => {
-        connected = true;
-        showToast("Connected.");
-      });
+  // Camera
+  const cam = { x: 0, y: 0, w: c.width, h: c.height };
 
-      socket.on("disconnect", () => {
-        connected = false;
-        myId = null;
-        roomId = null;
-        others.clear();
-        showToast("Disconnected.");
-      });
+  // Aim drag
+  let dragging = false;
+  let dragStart = null; // world position
+  let dragNow = null;   // world position
 
-      socket.on("room_created", (d) => {
-        if (d && d.roomId) roomInp.value = d.roomId;
-      });
+  function wsUrl() {
+    const proto = (location.protocol === "https:") ? "wss" : "ws";
+    return `${proto}://${location.host}`;
+  }
 
-      socket.on("room_joined", (d) => {
-        roomId = d.roomId;
-        myId = d.you;
-        others.clear();
-        if (Array.isArray(d.players)) {
-          for (const p of d.players) upsertOther(p);
-        }
-        showToast("Joined room: " + roomId);
-      });
+  function connect() {
+    ws = new WebSocket(wsUrl());
+    pillWs.textContent = "WS: connecting";
 
-      socket.on("join_error", (d) => {
-        showToast(d?.message || "Join error");
-      });
-
-      socket.on("player_joined", (p) => {
-        upsertOther(p);
-        showToast((p?.name || "Player") + " joined.");
-      });
-
-      socket.on("player_left", (p) => {
-        if (p && p.id) others.delete(p.id);
-      });
-
-      socket.on("player_state", (p) => {
-        upsertOther(p);
-      });
-    }
-
-    function safeRoom(s){
-      return String(s || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
-    }
-
-    joinBtn.onclick = () => {
-      if (!socket) { showToast("Socket not available."); return; }
-      const name = (nameInp.value || "Player").trim().slice(0, 18) || "Player";
-      const rid = safeRoom(roomInp.value);
-      if (!rid) { showToast("Enter a room."); return; }
-      socket.emit("join_room", { roomId: rid, name });
+    ws.onopen = () => {
+      pillWs.textContent = "WS: open";
     };
-
-    createBtn.onclick = () => {
-      if (!socket) { showToast("Socket not available."); return; }
-      const name = (nameInp.value || "Player").trim().slice(0, 18) || "Player";
-      const rid = safeRoom(roomInp.value);
-      socket.emit("create_room", { roomId: rid, name });
+    ws.onclose = () => {
+      pillWs.textContent = "WS: closed";
+      setTimeout(connect, 800);
     };
-
-    // Game tuning
-    const MAX_PULL = 170;
-    const FORCE_SCALE = 0.11;
-    const LAUNCH_MULT = 95;
-
-    // Faster regain control
-    const CONTROL_EPS = 18;
-    const BASE_FRICTION = 0.990;
-    const WALL_IMPACT_DAMP = 0.80;
-    const BASE_BOUNCE_KEEP = 0.94;
-    const SPEED_CAP = 420;
-
-    // Powerups
-    const DASH_SPEED = 260;
-    const MAGNET_RADIUS = 140;
-    const MAGNET_STRENGTH = 1.4;
-    const MAGNET_DURATION = 6.0;
-
-    // Boss testing
-    const BOSS_AFTER_ROUNDS = 1;
-
-    // Camera shake
-    let shakeTime = 0;
-    let shakeMag = 0;
-    function addShake(mag, t){
-      shakeMag = Math.max(shakeMag, mag);
-      shakeTime = Math.max(shakeTime, t);
-    }
-
-    // World
-    let walls = [];
-    let collectibles = [];
-    let finish = null;
-    let powerups = [];
-    let pads = [];
-    let traps = [];
-
-    let score = 0;
-    let launches = 0;
-    let won = false;
-
-    // Boss state
-    let inBoss = false;
-    let roundsCleared = 0;
-
-    const BOSSES = [
-      {
-        id: "boulder",
-        name: "Moko Boulder Idol",
-        weakness: "BOULDER",
-        hint: "Only the boulder can damage it. Flick yourself into the boulder to launch it.",
-        hp: 7
-      },
-      {
-        id: "dash",
-        name: "Armored Crab King",
-        weakness: "DASH",
-        hint: "Only dash strikes hurt it. Tap while moving to dash into it.",
-        hp: 8
-      },
-      {
-        id: "parry",
-        name: "Spirit Owl Warden",
-        weakness: "PARRY",
-        hint: "Parry the shockwave. Dash through the ring edge as it expands to reflect damage.",
-        hp: 6
-      }
-    ];
-
-    let boss = null;
-    let bossBoulder = null;
-    let bossRing = null;
-
-    function baseBounds(){
-      return [
-        {x: 30, y: 30, w: W-60, h: 12},
-        {x: 30, y: H-42, w: W-60, h: 12},
-        {x: 30, y: 30, w: 12, h: H-60},
-        {x: W-42, y: 30, w: 12, h: H-60}
-      ];
-    }
-
-    function placePowerup(type, x, y) {
-      powerups.push({ type, x, y, r: 12, taken: false });
-    }
-
-    // Player
-    const player = {
-      name: "You",
-      x: 120, y: H/2,
-      vx: 0, vy: 0,
-      r: 16,
-      dashCharges: 1,
-      magnetTime: 0,
-      shield: false,
-      dashStrikeTimer: 0,
-      firstLaunchBoost: 1.0,
-      firstLaunchAvailable: true,
-      bounceKeep: BASE_BOUNCE_KEEP
+    ws.onerror = () => {
+      pillWs.textContent = "WS: error";
     };
+    ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
 
-    let checkpoint = { x: player.x, y: player.y };
+      if (msg.t === "joined") {
+        myId = msg.id;
+        roomCode = msg.code;
+        hostId = msg.hostId;
 
-    function isStopped(){
-      return Math.hypot(player.vx, player.vy) < CONTROL_EPS;
-    }
+        pillRoom.textContent = `Room: ${roomCode}`;
+        pillYou.textContent = `You: ${myId}`;
+        pillHost.textContent = `Host: ${hostId}`;
 
-    function resetPlayer(){
-      player.x = checkpoint.x;
-      player.y = checkpoint.y;
-      player.vx = 0;
-      player.vy = 0;
-    }
+        // lock name field after join
+        nameInput.disabled = true;
+        roomInput.value = roomCode;
 
-    function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
-      const nx = clamp(cx, rx, rx + rw);
-      const ny = clamp(cy, ry, ry + rh);
-      const dx = cx - nx;
-      const dy = cy - ny;
-      return (dx*dx + dy*dy) <= cr*cr;
-    }
-
-    function resolveCircleRect(cx, cy, cr, rx, ry, rw, rh, vx, vy) {
-      const nx = clamp(cx, rx, rx + rw);
-      const ny = clamp(cy, ry, ry + rh);
-      let dx = cx - nx;
-      let dy = cy - ny;
-
-      const dist = Math.hypot(dx, dy);
-      if (dist === 0) {
-        const n = norm(-vx || 0, -vy || 1);
-        dx = n.x; dy = n.y;
+        menuMsg.textContent = "";
       }
 
-      const nrm = norm(dx, dy);
-      const overlap = cr - (dist || 0);
-
-      if (overlap > 0) {
-        cx += nrm.x * overlap;
-        cy += nrm.y * overlap;
-
-        const dot = vx*nrm.x + vy*nrm.y;
-        vx = vx - 2*dot*nrm.x;
-        vy = vy - 2*dot*nrm.y;
-
-        vx *= player.bounceKeep;
-        vy *= player.bounceKeep;
+      if (msg.t === "err") {
+        menuMsg.textContent = msg.m || "Error";
       }
-      return {cx, cy, vx, vy};
-    }
 
-    // Input
-    let pointerDown = false;
-    let dragStart = {x:0, y:0};
-    let dragNow = {x:0, y:0};
-    let dragging = false;
+      if (msg.t === "snap") {
+        snapshot = msg;
+        hostId = msg.room.hostId;
+        pillHost.textContent = `Host: ${hostId}`;
+        renderLobby();
+      }
+    };
+  }
 
-    function getPos(e){
-      const rect = canvas.getBoundingClientRect();
-      const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
-      const cy = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
-      return {
-        x: (cx - rect.left) * (canvas.width / rect.width),
-        y: (cy - rect.top) * (canvas.height / rect.height)
+  // UI buttons
+  btnCreate.onclick = () => {
+    clickFX(btnCreate);
+    const name = cleanName(nameInput.value);
+    if (!name) { menuMsg.textContent = "Enter a name first"; return; }
+    wsSend({ t: "create", name });
+  };
+
+  btnJoin.onclick = () => {
+    clickFX(btnJoin);
+    const name = cleanName(nameInput.value);
+    const code = String(roomInput.value || "").trim().toUpperCase();
+    if (!name) { menuMsg.textContent = "Enter a name first"; return; }
+    if (!code) { menuMsg.textContent = "Enter a room code"; return; }
+    wsSend({ t: "join", name, code });
+  };
+
+  btnSetMode.onclick = () => {
+    clickFX(btnSetMode);
+    wsSend({ t: "set_mode", mode: modeSelect.value });
+  };
+
+  btnReady.onclick = () => {
+    clickFX(btnReady);
+    isReady = !isReady;
+    wsSend({ t: "ready", v: isReady });
+    btnReady.textContent = isReady ? "Ready (On)" : "Ready";
+  };
+
+  btnStart.onclick = () => {
+    clickFX(btnStart);
+    wsSend({ t: "start" });
+  };
+
+  btnReset.onclick = () => {
+    clickFX(btnReset);
+    wsSend({ t: "reset" });
+  };
+
+  btnReloadMap.onclick = () => {
+    clickFX(btnReloadMap);
+    wsSend({ t: "reload_map" });
+  };
+
+  btnResetPos.onclick = () => {
+    clickFX(btnResetPos);
+    wsSend({ t: "reset_positions" });
+  };
+
+  btnDash.onclick = () => {
+    clickFX(btnDash);
+    wsSend({ t: "dash" });
+  };
+
+  function clickFX(btn) {
+    btn.style.transform = "scale(0.98)";
+    setTimeout(() => btn.style.transform = "", 90);
+  }
+
+  function cleanName(s) {
+    s = String(s || "").trim();
+    if (!s) return "";
+    s = s.replace(/[^\w\s\-]/g, "").trim();
+    if (s.length > 14) s = s.slice(0, 14);
+    return s;
+  }
+
+  function wsSend(obj) {
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify(obj));
+  }
+
+  // Character picker
+  function buildCharUI() {
+    charGrid.innerHTML = "";
+    CHARACTERS.forEach(ch => {
+      const div = document.createElement("div");
+      div.className = "char" + (ch.id === selectedChar ? " selected" : "");
+      div.onclick = () => {
+        selectedChar = ch.id;
+        // update selected styling
+        [...charGrid.children].forEach(n => n.classList.remove("selected"));
+        div.classList.add("selected");
+        wsSend({ t: "pick", charId: selectedChar });
+        // turning off ready on pick is handled server side, so mirror it
+        isReady = false;
+        btnReady.textContent = "Ready";
       };
-    }
 
-    function tryUseDash(){
-      if (won) return false;
-      if (player.dashCharges <= 0) return false;
-      const sp = Math.hypot(player.vx, player.vy);
-      if (sp < 0.6) return false;
+      const icon = document.createElement("div");
+      icon.className = "icon";
+      icon.textContent = ch.key;
 
-      const d = norm(player.vx, player.vy);
-      player.vx += d.x * DASH_SPEED;
-      player.vy += d.y * DASH_SPEED;
-      player.dashCharges -= 1;
-      player.dashStrikeTimer = 0.18;
-      showToast("Dash!");
-      return true;
-    }
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.innerHTML = `<div style="font-weight:800">${ch.label}</div><div class="small">${ch.trait}</div>`;
 
-    function pointerDownHandler(e){
-      e.preventDefault();
-      const p = getPos(e);
-      pointerDown = true;
-      dragStart = p;
-      dragNow = p;
-
-      // Tap while moving uses dash and can parry
-      if (!isStopped()) {
-        const didDash = tryUseDash();
-        if (didDash && inBoss && boss && boss.weakness === "PARRY" && bossRing && bossRing.active) {
-          const dx = player.x - bossRing.x;
-          const dy = player.y - bossRing.y;
-          const dist = Math.hypot(dx, dy);
-          const within = Math.abs(dist - bossRing.r) < 22;
-          if (within) {
-            bossTakeDamage(1, "PARRY");
-            bossRing.active = false;
-            addShake(14, 0.20);
-            showToast("Parry!");
-          }
-        }
-        dragging = false;
-        return;
-      }
-
-      const d = Math.hypot(p.x - player.x, p.y - player.y);
-      dragging = isStopped() && d <= player.r + 12;
-    }
-
-    function pointerMoveHandler(e){
-      if (!pointerDown) return;
-      dragNow = getPos(e);
-    }
-
-    function pointerUpHandler(){
-      if (!pointerDown) return;
-      pointerDown = false;
-
-      if (!dragging || won) { dragging = false; return; }
-
-      const dx = dragStart.x - dragNow.x;
-      const dy = dragStart.y - dragNow.y;
-      const n = norm(dx, dy);
-      const pull = clamp(n.l, 0, MAX_PULL);
-
-      if (pull > 6) {
-        let power = pull * FORCE_SCALE;
-        if (player.firstLaunchAvailable) {
-          power *= player.firstLaunchBoost;
-          player.firstLaunchAvailable = false;
-        }
-        player.vx = n.x * power * LAUNCH_MULT;
-        player.vy = n.y * power * LAUNCH_MULT;
-        launches += 1;
-      }
-      dragging = false;
-    }
-
-    canvas.addEventListener("mousedown", pointerDownHandler);
-    canvas.addEventListener("mousemove", pointerMoveHandler);
-    window.addEventListener("mouseup", pointerUpHandler);
-
-    canvas.addEventListener("touchstart", pointerDownHandler, {passive:false});
-    canvas.addEventListener("touchmove", pointerMoveHandler, {passive:false});
-    window.addEventListener("touchend", pointerUpHandler, {passive:false});
-
-    window.addEventListener("keydown", (e) => {
-      const k = e.key.toLowerCase();
-      if (k === "r") restartStage();
-      if (k === "n") continueStage();
+      div.appendChild(icon);
+      div.appendChild(meta);
+      charGrid.appendChild(div);
     });
+  }
 
-    // Stages
-    function newNormalLevel(){
-      inBoss = false;
-      boss = null;
-      bossBoulder = null;
-      bossRing = null;
+  function renderLobby() {
+    if (!snapshot) return;
 
-      won = false;
-      score = 0;
-      launches = 0;
-      player.dashCharges = 1;
-      player.magnetTime = 0;
-      player.dashStrikeTimer = 0;
-      player.firstLaunchAvailable = true;
+    lobbyList.innerHTML = "";
+    const l = snapshot.lobby;
 
-      walls = baseBounds();
-      walls.push({x: 220, y: 140, w: 260, h: 24});
-      walls.push({x: 300, y: 340, w: 330, h: 24});
-      walls.push({x: 610, y: 180, w: 24, h: 220});
+    lobbyModeText.textContent = `Mode: ${l.mode === "boss" ? "Boss Co-op" : "Obstacle Race"}`;
 
-      finish = { x: W - 170, y: 110, w: 110, h: 75 };
-
-      collectibles = [];
-      for (let i=0;i<6;i++){
-        collectibles.push({ x: rnd(150, W-180), y: rnd(90, H-90), r: 10, taken: false, value: 25 });
-      }
-
-      traps = [{x: 460, y: 260, r: 14}];
-
-      pads = [{x: 120, y: 260, w: 120, h: 16}, {x: 720, y: 440, w: 140, h: 16}];
-
-      powerups = [];
-      placePowerup("dash", 650, 100);
-      placePowerup("magnet", 260, 430);
-
-      player.x = 120;
-      player.y = H/2;
-      player.vx = 0;
-      player.vy = 0;
-      checkpoint = { x: player.x, y: player.y };
-
-      showToast("Normal level. Clear it to spawn a boss (testing).");
+    if (snapshot.game) {
+      lobbyMapText.textContent = `Map: ${snapshot.game.mapName || snapshot.game.mapId || "-"}`;
+      hintEl.textContent = snapshot.game.hint || "";
+      toastEl.textContent = snapshot.game.toast || "";
+    } else {
+      lobbyMapText.textContent = `Map: -`;
+      hintEl.textContent = "";
+      toastEl.textContent = "";
     }
 
-    function pickBoss(){
-      return BOSSES[Math.floor(Math.random() * BOSSES.length)];
+    modeSelect.value = l.mode;
+
+    (l.players || []).forEach(p => {
+      const row = document.createElement("div");
+      row.className = "playerRow";
+
+      const left = document.createElement("div");
+      left.className = "playerLeft";
+
+      const dot = document.createElement("div");
+      dot.className = "dot";
+      dot.style.background = PALETTE[p.colorIndex % PALETTE.length];
+
+      const who = document.createElement("div");
+      who.innerHTML = `<div style="font-weight:800">${escapeHtml(p.name)} ${p.id === snapshot.room.hostId ? "<span class='tag'>HOST</span>" : ""}</div>
+        <div class="small">${escapeHtml(labelForChar(p.charId))}</div>`;
+
+      left.appendChild(dot);
+      left.appendChild(who);
+
+      const right = document.createElement("div");
+      right.innerHTML = p.ready ? `<span class="tag">Ready</span>` : `<span class="tag" style="opacity:0.65">Not Ready</span>`;
+
+      row.appendChild(left);
+      row.appendChild(right);
+
+      lobbyList.appendChild(row);
+    });
+  }
+
+  function labelForChar(charId) {
+    const c = CHARACTERS.find(x => x.id === charId);
+    return c ? c.label : charId;
+  }
+
+  function escapeHtml(s) {
+    s = String(s || "");
+    return s.replace(/[&<>"']/g, (m) => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[m]));
+  }
+
+  // Input and aiming
+  function canAct() {
+    if (!snapshot || !snapshot.game) return false;
+    const g = snapshot.game;
+    if (g.phase !== "play") return false;
+    if (!myId) return false;
+    if (g.turn.activeId !== myId) return false;
+    if (g.turn.state !== "aim") return false;
+    return true;
+  }
+
+  function worldToScreen(x, y) {
+    return { x: x - cam.x, y: y - cam.y };
+  }
+  function screenToWorld(x, y) {
+    return { x: x + cam.x, y: y + cam.y };
+  }
+
+  function pointerPos(ev) {
+    const rect = c.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * (c.width / rect.width);
+    const py = (ev.clientY - rect.top) * (c.height / rect.height);
+    return { x: px, y: py };
+  }
+
+  c.addEventListener("pointerdown", (ev) => {
+    if (!canAct()) return;
+    const p = snapshot.game.players[myId];
+    if (!p) return;
+
+    const sp = pointerPos(ev);
+    const w = screenToWorld(sp.x, sp.y);
+
+    // must click near your ball
+    const d = Math.hypot(w.x - p.x, w.y - p.y);
+    if (d > p.r + 18) return;
+
+    dragging = true;
+    dragStart = { x: p.x, y: p.y };
+    dragNow = w;
+    c.setPointerCapture(ev.pointerId);
+  });
+
+  c.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    const sp = pointerPos(ev);
+    dragNow = screenToWorld(sp.x, sp.y);
+  });
+
+  c.addEventListener("pointerup", (ev) => {
+    if (!dragging) return;
+    dragging = false;
+
+    if (!dragStart || !dragNow) return;
+
+    const dx = dragStart.x - dragNow.x;
+    const dy = dragStart.y - dragNow.y;
+
+    // flick strength tuning
+    const power = 6.2;
+    const vx = clamp(dx * power, -2200, 2200);
+    const vy = clamp(dy * power, -2200, 2200);
+
+    wsSend({ t: "act", kind: "flick", vx, vy });
+
+    dragStart = null;
+    dragNow = null;
+  });
+
+  window.addEventListener("keydown", (ev) => {
+    if (ev.code === "Space") {
+      wsSend({ t: "dash" });
+    }
+  });
+
+  // Rendering
+  function updateCamera() {
+    if (!snapshot || !snapshot.game || !myId) return;
+    const g = snapshot.game;
+    const me = g.players[myId];
+    if (!me) return;
+
+    // center on active player if it is your turn, else center on you
+    const focusId = (g.turn.activeId && g.players[g.turn.activeId]) ? g.turn.activeId : myId;
+    const f = g.players[focusId] || me;
+
+    cam.w = c.width;
+    cam.h = c.height;
+
+    cam.x = f.x - cam.w * 0.5;
+    cam.y = f.y - cam.h * 0.5;
+
+    cam.x = clamp(cam.x, 0, Math.max(0, g.W - cam.w));
+    cam.y = clamp(cam.y, 0, Math.max(0, g.H - cam.h));
+  }
+
+  function draw() {
+    requestAnimationFrame(draw);
+
+    ctx.clearRect(0, 0, c.width, c.height);
+
+    if (!snapshot || !snapshot.game) {
+      // idle background
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      ctx.fillRect(30, 30, c.width - 60, c.height - 60);
+      ctx.globalAlpha = 1;
+      return;
     }
 
-    function newBossArena(){
-      inBoss = true;
-      const b = pickBoss();
-      boss = {
-        id: b.id,
-        name: b.name,
-        weakness: b.weakness,
-        hint: b.hint,
-        hp: b.hp,
-        hpMax: b.hp,
-        x: W * 0.72,
-        y: H * 0.50,
-        r: 44,
-        moveT: 0
-      };
+    const g = snapshot.game;
+    updateCamera();
 
-      won = false;
-      score = 0;
-      launches = 0;
-      player.dashCharges = (boss.weakness === "DASH" || boss.weakness === "PARRY") ? 2 : 1;
-      player.magnetTime = 0;
-      player.dashStrikeTimer = 0;
-      player.firstLaunchAvailable = true;
-
-      walls = baseBounds();
-      walls.push({x: 220, y: 90, w: 24, h: 340});
-      walls.push({x: 340, y: 150, w: 260, h: 24});
-      walls.push({x: 340, y: 346, w: 260, h: 24});
-      walls.push({x: 600, y: 150, w: 24, h: 220});
-
-      finish = null;
-
-      collectibles = [];
-      for (let i=0;i<6;i++){
-        collectibles.push({ x: rnd(160, W-200), y: rnd(90, H-90), r: 10, taken: false, value: 15 });
-      }
-
-      traps = [];
-      pads = [{x: 120, y: 260, w: 120, h: 16}, {x: 740, y: 260, w: 140, h: 16}];
-
-      powerups = [];
-      if (boss.weakness === "DASH") placePowerup("dash", 320, 110);
-      if (boss.weakness === "PARRY") placePowerup("dash", 320, 260);
-      if (boss.weakness === "BOULDER") placePowerup("shield", 320, 260);
-
-      bossBoulder = null;
-      if (boss.weakness === "BOULDER") {
-        bossBoulder = { x: W*0.42, y: H*0.50, vx: 0, vy: 0, r: 22 };
-      }
-
-      bossRing = null;
-      if (boss.weakness === "PARRY") {
-        bossRing = { x: boss.x, y: boss.y, r: 10, spd: 220, active: false, cd: 1.2 };
-      }
-
-      player.x = 120;
-      player.y = H/2;
-      player.vx = 0;
-      player.vy = 0;
-      checkpoint = { x: player.x, y: player.y };
-
-      showToast(boss.name + " appeared. " + boss.hint, 2600);
+    // shake
+    let sx = 0, sy = 0;
+    if (g.shake && g.shake > 0) {
+      sx = (Math.random() - 0.5) * g.shake;
+      sy = (Math.random() - 0.5) * g.shake;
     }
 
-    function restartStage(){
-      if (inBoss) newBossArena();
-      else newNormalLevel();
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    // world bg
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.globalAlpha = 1;
+
+    // draw walls
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    for (const w of g.walls) {
+      const s = worldToScreen(w.x, w.y);
+      ctx.fillRect(s.x, s.y, w.w, w.h);
     }
 
-    function continueStage(){
-      if (!won) return;
-
-      won = false;
-      if (!inBoss) {
-        roundsCleared += 1;
-        if (roundsCleared >= BOSS_AFTER_ROUNDS) {
-          roundsCleared = 0;
-          newBossArena();
-        } else {
-          newNormalLevel();
-        }
-        return;
-      }
-
-      // After boss, go back to normal level
-      newNormalLevel();
+    // pads
+    ctx.fillStyle = "rgba(120,160,255,0.28)";
+    for (const p of g.pads) {
+      const s = worldToScreen(p.x, p.y);
+      ctx.fillRect(s.x, s.y, p.w, p.h);
     }
 
-    // Boss damage
-    function bossTakeDamage(amount, source){
-      if (!boss) return;
-
-      if (boss.weakness === "BOULDER" && source !== "BOULDER") return;
-      if (boss.weakness === "DASH" && source !== "DASH") return;
-      if (boss.weakness === "PARRY" && source !== "PARRY") return;
-
-      boss.hp = Math.max(0, boss.hp - amount);
-      addShake(12, 0.18);
-      showToast("Boss hit!");
-
-      if (boss.hp <= 0) {
-        won = true;
-        addShake(18, 0.25);
-        showToast("Boss defeated. Press N.", 2200);
-      }
+    // finish
+    if (g.finish) {
+      ctx.fillStyle = "rgba(80,255,160,0.22)";
+      const s = worldToScreen(g.finish.x, g.finish.y);
+      ctx.fillRect(s.x, s.y, g.finish.w, g.finish.h);
     }
 
-    // Update loop
-    function update(dt){
-      if (shakeTime > 0) shakeTime = Math.max(0, shakeTime - dt);
-      if (player.magnetTime > 0) player.magnetTime = Math.max(0, player.magnetTime - dt);
-      if (player.dashStrikeTimer > 0) player.dashStrikeTimer = Math.max(0, player.dashStrikeTimer - dt);
-
-      if (!won) {
-        player.x += player.vx * dt;
-        player.y += player.vy * dt;
-
-        player.vx *= BASE_FRICTION;
-        player.vy *= BASE_FRICTION;
-
-        const sp = Math.hypot(player.vx, player.vy);
-        if (sp > SPEED_CAP) {
-          const n = norm(player.vx, player.vy);
-          player.vx = n.x * SPEED_CAP;
-          player.vy = n.y * SPEED_CAP;
-        }
-
-        // Walls collisions (also damp so you regain control faster)
-        for (const w of walls) {
-          if (circleRectCollide(player.x, player.y, player.r, w.x, w.y, w.w, w.h)) {
-            const res = resolveCircleRect(player.x, player.y, player.r, w.x, w.y, w.w, w.h, player.vx, player.vy);
-            player.x = res.cx; player.y = res.cy;
-            player.vx = res.vx * WALL_IMPACT_DAMP;
-            player.vy = res.vy * WALL_IMPACT_DAMP;
-          }
-        }
-
-        // Collectibles
-        for (const c of collectibles) {
-          if (c.taken) continue;
-          const d = Math.hypot(player.x - c.x, player.y - c.y);
-          if (d <= player.r + c.r) {
-            c.taken = true;
-            score += c.value;
-            checkpoint = { x: player.x, y: player.y };
-          }
-        }
-
-        // Powerups
-        for (const p of powerups) {
-          if (p.taken) continue;
-          const d = Math.hypot(player.x - p.x, player.y - p.y);
-          if (d <= player.r + p.r) {
-            p.taken = true;
-            if (p.type === "dash") { player.dashCharges += 1; showToast("Dash orb."); }
-            if (p.type === "magnet") { player.magnetTime = MAGNET_DURATION; showToast("Magnet 6s."); }
-            if (p.type === "shield") { player.shield = true; showToast("Shield."); }
-          }
-        }
-
-        // Boss movement and boss mechanics
-        if (inBoss && boss) {
-          boss.moveT += dt;
-          boss.x = W*0.72 + Math.sin(boss.moveT*1.1) * 70;
-          boss.y = H*0.50 + Math.cos(boss.moveT*0.9) * 70;
-
-          // Dash boss: dash strike into boss
-          const db = Math.hypot(player.x - boss.x, player.y - boss.y);
-          if (db <= player.r + boss.r) {
-            const n = norm(player.x - boss.x, player.y - boss.y);
-            player.vx += n.x * 120;
-            player.vy += n.y * 120;
-
-            if (boss.weakness === "DASH" && player.dashStrikeTimer > 0) {
-              bossTakeDamage(1, "DASH");
-              player.dashStrikeTimer = 0;
-              addShake(14, 0.20);
-            }
-          }
-
-          // Parry boss ring
-          if (boss.weakness === "PARRY" && bossRing) {
-            bossRing.cd -= dt;
-            if (!bossRing.active && bossRing.cd <= 0) {
-              bossRing.active = true;
-              bossRing.x = boss.x;
-              bossRing.y = boss.y;
-              bossRing.r = 10;
-              bossRing.cd = 2.1;
-              showToast("Shockwave!");
-            }
-            if (bossRing.active) {
-              bossRing.r += bossRing.spd * dt;
-              if (bossRing.r > 520) bossRing.active = false;
-
-              // If player touches ring without parry, reset
-              const dx = player.x - bossRing.x;
-              const dy = player.y - bossRing.y;
-              const dist = Math.hypot(dx, dy);
-              const hitRing = Math.abs(dist - bossRing.r) < 10;
-              if (hitRing && player.dashStrikeTimer <= 0) {
-                if (player.shield) {
-                  player.shield = false;
-                  showToast("Shield saved you.");
-                } else {
-                  showToast("Shockwave hit. Reset.");
-                  resetPlayer();
-                }
-              }
-            }
-          }
-
-          // Boulder boss
-          if (boss.weakness === "BOULDER" && bossBoulder) {
-            bossBoulder.x += bossBoulder.vx * dt;
-            bossBoulder.y += bossBoulder.vy * dt;
-            bossBoulder.vx *= 0.992;
-            bossBoulder.vy *= 0.992;
-
-            for (const w of walls) {
-              if (circleRectCollide(bossBoulder.x, bossBoulder.y, bossBoulder.r, w.x, w.y, w.w, w.h)) {
-                const res = resolveCircleRect(bossBoulder.x, bossBoulder.y, bossBoulder.r, w.x, w.y, w.w, w.h, bossBoulder.vx, bossBoulder.vy);
-                bossBoulder.x = res.cx; bossBoulder.y = res.cy;
-                bossBoulder.vx = res.vx * 0.92;
-                bossBoulder.vy = res.vy * 0.92;
-              }
-            }
-
-            // Player pushes boulder
-            const dp = Math.hypot(player.x - bossBoulder.x, player.y - bossBoulder.y);
-            if (dp <= player.r + bossBoulder.r) {
-              const n = norm(bossBoulder.x - player.x, bossBoulder.y - player.y);
-              const push = clamp(Math.hypot(player.vx, player.vy), 80, 360);
-              bossBoulder.vx += n.x * push * 0.85;
-              bossBoulder.vy += n.y * push * 0.85;
-              addShake(6, 0.10);
-            }
-
-            // Boulder hits boss
-            const d2 = Math.hypot(boss.x - bossBoulder.x, boss.y - bossBoulder.y);
-            if (d2 <= boss.r + bossBoulder.r) {
-              const sp2 = Math.hypot(bossBoulder.vx, bossBoulder.vy);
-              if (sp2 > 55) {
-                bossTakeDamage(1, "BOULDER");
-                bossBoulder.vx *= 0.55;
-                bossBoulder.vy *= 0.55;
-                addShake(16, 0.20);
-                showToast("Boulder smash!");
-              }
-            }
-          }
-        }
-
-        // Finish (normal only)
-        if (!inBoss && finish) {
-          if (circleRectCollide(player.x, player.y, player.r, finish.x, finish.y, finish.w, finish.h)) {
-            won = true;
-            showToast("Level clear. Press N.", 2200);
-          }
-        }
-      }
-
-      // Multiplayer send (20 fps)
-      sendTimer -= dt;
-      if (sendTimer <= 0) {
-        sendTimer = 0.05;
-        if (socket && connected && roomId) {
-          socket.emit("player_state", {
-            x: player.x, y: player.y, vx: player.vx, vy: player.vy
-          });
-        }
-      }
-
-      // Smooth other players
-      for (const [id, p] of others) {
-        const dx = p.x - p.rx;
-        const dy = p.y - p.ry;
-        p.rx += dx * 0.18;
-        p.ry += dy * 0.18;
-      }
+    // traps
+    ctx.fillStyle = "rgba(255,120,120,0.28)";
+    for (const t of g.traps) {
+      const s = worldToScreen(t.x, t.y);
+      circle(s.x, s.y, t.r);
     }
 
-    // Draw
-    function drawGlowCircle(x,y,r,color){
+    // hazards (boss)
+    ctx.fillStyle = "rgba(255,160,80,0.28)";
+    for (const hz of g.hazards || []) {
+      const s = worldToScreen(hz.x, hz.y);
+      circle(s.x, s.y, hz.r);
+    }
+
+    // coins
+    ctx.fillStyle = "rgba(255,215,120,0.28)";
+    for (const co of g.coins || []) {
+      if (co.takenBy) continue;
+      const s = worldToScreen(co.x, co.y);
+      circle(s.x, s.y, co.r);
+    }
+
+    // items
+    for (const it of g.items || []) {
+      if (it.takenBy) continue;
+      const s = worldToScreen(it.x, it.y);
+      if (it.type === "dash") ctx.fillStyle = "rgba(120,180,255,0.30)";
+      else if (it.type === "shield") ctx.fillStyle = "rgba(140,255,200,0.26)";
+      else if (it.type === "magnet") ctx.fillStyle = "rgba(240,140,255,0.26)";
+      else ctx.fillStyle = "rgba(255,255,255,0.18)";
+      circle(s.x, s.y, it.r);
+    }
+
+    // boss
+    if (g.boss) {
+      const b = g.boss;
+      const s = worldToScreen(b.x, b.y);
+
+      // boss body
+      ctx.fillStyle = "rgba(200,200,255,0.16)";
+      circle(s.x, s.y, b.r);
+
+      // weak spot arc indicator
+      if (b.rules && b.rules.weakspot) {
+        ctx.strokeStyle = "rgba(255,220,120,0.65)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        const a0 = b.weakAngle - b.weakArc * 0.5;
+        const a1 = b.weakAngle + b.weakArc * 0.5;
+        ctx.arc(s.x, s.y, b.r + 10, a0, a1);
+        ctx.stroke();
+      }
+
+      // parry ring
+      if (b.ringActive) {
+        const rs = worldToScreen(b.ringX, b.ringY);
+        ctx.strokeStyle = "rgba(160,220,255,0.5)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(rs.x, rs.y, b.ringR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // boss hp bar
+      drawBar(18, 16, 280, 10, b.hp / Math.max(1, b.hpMax), "Boss HP");
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.font = "12px system-ui";
+      ctx.fillText(`${b.name}`, 18, 48);
+    }
+
+    // players
+    for (const pid in g.players) {
+      const p = g.players[pid];
+      const s = worldToScreen(p.x, p.y);
+
+      const col = PALETTE[(p.colorIndex || 0) % PALETTE.length];
+
+      // ball
+      ctx.fillStyle = hexToRgba(col, 0.35);
+      circle(s.x, s.y, p.r);
+
+      // character style ring
+      ctx.strokeStyle = hexToRgba(col, 0.85);
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.fillStyle = color;
-      ctx.arc(x,y,r,0,Math.PI*2);
-      ctx.fill();
-    }
+      ctx.arc(s.x, s.y, p.r + 2, 0, Math.PI * 2);
+      ctx.stroke();
 
-    function draw(){
-      ctx.clearRect(0,0,W,H);
-
-      ctx.save();
-      if (shakeTime > 0) {
-        const t = shakeTime / 0.25;
-        const mag = shakeMag * (0.4 + 0.6 * t);
-        ctx.translate((Math.random()*2-1)*mag, (Math.random()*2-1)*mag);
-      }
-
-      // Walls
-      for (const w of walls) {
-        ctx.fillStyle = "rgba(255,255,255,0.10)";
-        ctx.fillRect(w.x, w.y, w.w, w.h);
-        ctx.strokeStyle = "rgba(255,255,255,0.18)";
-        ctx.strokeRect(w.x + 0.5, w.y + 0.5, w.w - 1, w.h - 1);
-      }
-
-      // Pads
-      for (const p of pads) {
-        ctx.fillStyle = "rgba(92,200,255,0.25)";
-        ctx.fillRect(p.x, p.y, p.w, p.h);
-        ctx.strokeStyle = "rgba(92,200,255,0.55)";
-        ctx.strokeRect(p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1);
-        ctx.fillStyle = "rgba(255,255,255,0.65)";
-        ctx.font = "10px system-ui";
-        ctx.fillText("BOOST", p.x + 8, p.y + 12);
-      }
-
-      // Finish
-      if (!inBoss && finish) {
-        ctx.fillStyle = "rgba(124,242,255,0.24)";
-        ctx.fillRect(finish.x - 6, finish.y - 6, finish.w + 12, finish.h + 12);
-        ctx.fillStyle = "rgba(124,242,255,0.10)";
-        ctx.fillRect(finish.x, finish.y, finish.w, finish.h);
-        ctx.strokeStyle = "#7cf2ff";
+      // special: frog has double ring
+      if (p.charId === "frog") {
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
         ctx.lineWidth = 2;
-        ctx.strokeRect(finish.x + 0.5, finish.y + 0.5, finish.w - 1, finish.h - 1);
-        ctx.fillStyle = "rgba(255,255,255,0.80)";
-        ctx.font = "800 12px system-ui";
-        ctx.fillText("FINISH", finish.x + 22, finish.y + 40);
-      }
-
-      // Collectibles
-      for (const c of collectibles) {
-        if (c.taken) continue;
-        drawGlowCircle(c.x, c.y, c.r + 10, "rgba(255,211,106,0.25)");
         ctx.beginPath();
-        ctx.fillStyle = "#ffd36a";
-        ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
-        ctx.fill();
-      }
-
-      // Powerups
-      for (const p of powerups) {
-        if (p.taken) continue;
-        let col = "#5cc8ff", glow = "rgba(92,200,255,0.25)", label = "D";
-        if (p.type === "magnet") { col = "#c56bff"; glow = "rgba(197,107,255,0.22)"; label = "M"; }
-        if (p.type === "shield") { col = "#76ff8a"; glow = "rgba(118,255,138,0.20)"; label = "S"; }
-
-        drawGlowCircle(p.x, p.y, p.r + 12, glow);
-        ctx.beginPath();
-        ctx.strokeStyle = col;
-        ctx.lineWidth = 2;
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.arc(s.x, s.y, p.r - 6, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = "rgba(255,255,255,0.88)";
-        ctx.font = "900 12px system-ui";
-        ctx.fillText(label, p.x - 4, p.y + 4);
       }
 
-      // Boss
-      if (inBoss && boss) {
-        drawGlowCircle(boss.x, boss.y, boss.r + 22, "rgba(255,255,255,0.10)");
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      // shield indicator
+      if (p.shield) {
+        ctx.strokeStyle = "rgba(160,255,220,0.55)";
         ctx.lineWidth = 3;
-        ctx.arc(boss.x, boss.y, boss.r, 0, Math.PI*2);
-        ctx.stroke();
-
-        // HP bar
-        const bw = 220, bh = 10;
-        const bx = W - bw - 40, by = 46;
-        ctx.fillStyle = "rgba(255,255,255,0.16)";
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.fillStyle = "rgba(255,90,122,0.90)";
-        ctx.fillRect(bx, by, bw * (boss.hp / boss.hpMax), bh);
-
-        ctx.fillStyle = "rgba(255,255,255,0.88)";
-        ctx.font = "900 12px system-ui";
-        ctx.fillText(boss.name, bx, by - 8);
-      }
-
-      // Parry ring
-      if (inBoss && bossRing && bossRing.active) {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(197,107,255,0.35)";
-        ctx.lineWidth = 4;
-        ctx.arc(bossRing.x, bossRing.y, bossRing.r, 0, Math.PI*2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(197,107,255,0.12)";
-        ctx.lineWidth = 10;
-        ctx.arc(bossRing.x, bossRing.y, bossRing.r, 0, Math.PI*2);
+        ctx.arc(s.x, s.y, p.r + 8, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Boulder
-      if (bossBoulder) {
-        drawGlowCircle(bossBoulder.x, bossBoulder.y, bossBoulder.r + 14, "rgba(255,211,106,0.10)");
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(255,211,106,0.85)";
-        ctx.lineWidth = 3;
-        ctx.arc(bossBoulder.x, bossBoulder.y, bossBoulder.r, 0, Math.PI*2);
-        ctx.stroke();
+      // name tag
+      const nm = p.name || pid;
+      drawNameTag(s.x, s.y - (p.r + 18), nm, pid === g.turn.activeId);
+
+      // if boss mode: draw hp/lives small near player
+      if (g.mode === "boss") {
         ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.font = "900 10px system-ui";
-        ctx.fillText("BOULDER", bossBoulder.x - 24, bossBoulder.y + 4);
+        ctx.font = "11px system-ui";
+        ctx.fillText(`HP ${p.hp}/${p.hpMax}  L ${p.lives}`, s.x - 28, s.y + (p.r + 18));
       }
+    }
 
-      // Aim line
-      if (dragging && pointerDown && isStopped() && !won) {
-        const dx = dragStart.x - dragNow.x;
-        const dy = dragStart.y - dragNow.y;
-        const n = norm(dx, dy);
-        const pull = clamp(n.l, 0, MAX_PULL);
-
-        const endX = player.x + n.x * (pull * 1.5);
-        const endY = player.y + n.y * (pull * 1.5);
-
-        ctx.save();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = "rgba(180,255,220,0.35)";
-        ctx.beginPath();
-        ctx.moveTo(player.x, player.y);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(180,255,220,0.95)";
-        ctx.beginPath();
-        ctx.arc(endX, endY, 5, 0, Math.PI*2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // Other players
-      for (const [id, p] of others) {
-        drawGlowCircle(p.rx, p.ry, 26, "rgba(255,255,255,0.08)");
-        ctx.beginPath();
-        ctx.fillStyle = "rgba(255,255,255,0.65)";
-        ctx.arc(p.rx, p.ry, 14, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,0.80)";
-        ctx.font = "800 11px system-ui";
-        ctx.fillText(p.name || "Player", p.rx - 18, p.ry - 20);
-      }
-
-      // Player
-      drawGlowCircle(player.x, player.y, player.r + 16, "rgba(255,255,255,0.16)");
+    // aim line
+    if (dragging && dragStart && dragNow && canAct()) {
+      const a = worldToScreen(dragStart.x, dragStart.y);
+      const b = worldToScreen(dragNow.x, dragNow.y);
+      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.fillStyle = "#ffffff";
-      ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
-      ctx.fill();
-
-      // shield ring
-      if (player.shield) {
-        ctx.beginPath();
-        ctx.strokeStyle = "rgba(118,255,138,0.85)";
-        ctx.lineWidth = 2;
-        ctx.arc(player.x, player.y, player.r + 7, 0, Math.PI*2);
-        ctx.stroke();
-      }
-
-      // win overlay
-      if (won) {
-        ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillRect(0,0,W,H);
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.font = "900 34px system-ui";
-        ctx.fillText(inBoss ? "BOSS DEFEATED" : "LEVEL COMPLETE", 290, 270);
-        ctx.font = "700 16px system-ui";
-        ctx.fillStyle = "rgba(255,255,255,0.86)";
-        ctx.fillText("Press N to continue, R restart", 345, 305);
-        ctx.restore();
-      }
-
-      ctx.restore();
-
-      // HUD
-      const rem = collectibles.filter(c => !c.taken).length;
-      const dashTxt = "Dash: " + player.dashCharges + " (tap while moving)";
-      const magnetTxt = player.magnetTime > 0 ? ("Magnet: " + player.magnetTime.toFixed(1) + "s") : "Magnet: OFF";
-      const bossHint = (inBoss && boss) ? ("<br><b>Boss Hint:</b> " + boss.hint) : "";
-
-      hud.innerHTML =
-        "<b>Forest Flick</b><br>" +
-        "Room: " + (roomId || "none") + "<br>" +
-        "Players: " + (1 + others.size) + "<br>" +
-        "Stage: " + (inBoss ? "Boss Arena" : "Normal Level") + "<br>" +
-        "Score: " + score + "<br>" +
-        "Launches: " + launches + "<br>" +
-        "Items left: " + rem + "<br>" +
-        dashTxt + "<br>" +
-        magnetTxt +
-        bossHint +
-        '<div class="small">Drag from the player to aim. Release to launch. While moving: tap to dash. Keys: R, N</div>';
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
     }
 
-    let sendTimer = 0.05;
+    // HUD text
+    drawHudText(g);
 
-    // Start with a level immediately so you never get blank screen
-    newNormalLevel();
-    showToast("Game loaded. Join or Create a room anytime.");
+    ctx.restore();
+  }
 
-    let last = performance.now();
-    function loop(now){
-      const dt = Math.min(1/30, (now - last) / 1000);
-      last = now;
-      update(dt);
-      draw();
-      requestAnimationFrame(loop);
+  function drawHudText(g) {
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.font = "13px system-ui";
+
+    const modeName = g.mode === "boss" ? "Boss Co-op" : "Obstacle Race";
+    ctx.fillText(`Mode: ${modeName}`, 18, c.height - 56);
+    ctx.fillText(`Round: ${g.round}`, 18, c.height - 36);
+
+    const active = g.turn.activeId;
+    const activeName = g.players[active]?.name || (active === "BOSS" ? "Boss" : active);
+    ctx.fillText(`Turn: ${activeName} (${g.turn.state}, ${Math.ceil(g.turn.msLeft / 1000)}s)`, 18, c.height - 16);
+
+    // dash button enable
+    if (myId && g.players[myId]) {
+      const me = g.players[myId];
+      const canDash = (g.turn.activeId === myId && g.turn.state === "resolving" && (me.dashCharges || 0) > 0);
+      btnDash.disabled = !canDash;
+      btnDash.textContent = canDash ? `Dash (${me.dashCharges})` : `Dash`;
     }
-    requestAnimationFrame(loop);
-  })();
-  </script>
+  }
+
+  function drawNameTag(x, y, text, highlight) {
+    ctx.font = "12px system-ui";
+    const pad = 6;
+    const w = ctx.measureText(text).width + pad * 2;
+    const h = 18;
+
+    ctx.fillStyle = highlight ? "rgba(70,120,255,0.28)" : "rgba(0,0,0,0.35)";
+    roundRect(x - w / 2, y - h / 2, w, h, 9);
+    ctx.fill();
+
+    ctx.strokeStyle = highlight ? "rgba(140,180,255,0.6)" : "rgba(255,255,255,0.14)";
+    ctx.lineWidth = 1;
+    roundRect(x - w / 2, y - h / 2, w, h, 9);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillText(text, x - w / 2 + pad, y + 4);
+  }
+
+  function drawBar(x, y, w, h, t, label) {
+    t = clamp(t, 0, 1);
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "rgba(120,180,255,0.35)";
+    ctx.fillRect(x, y, w * t, h);
+
+    ctx.fillStyle = "rgba(255,255,255,0.82)";
+    ctx.font = "11px system-ui";
+    ctx.fillText(label, x, y - 4);
+  }
+
+  function circle(x, y, r) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function roundRect(x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function hexToRgba(hex, a) {
+    const h = hex.replace("#", "");
+    const r = parseInt(h.slice(0,2), 16);
+    const g = parseInt(h.slice(2,4), 16);
+    const b = parseInt(h.slice(4,6), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  // Boot
+  buildCharUI();
+  connect();
+  requestAnimationFrame(draw);
+})();
+</script>
 </body>
 </html>
