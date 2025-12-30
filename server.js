@@ -1,206 +1,141 @@
 // server.js
-const express = require("express");
+// Simple Express + Socket.io room server for Forest Flick
+
+const path = require("path");
 const http = require("http");
-const WebSocket = require("ws");
+const express = require("express");
+const { Server } = require("socket.io");
 
 const app = express();
-app.use(express.static("."));
-
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
+
+app.use(express.static(path.join(__dirname, "public")));
 
 const rooms = new Map();
+// rooms: roomId -> { players: Map(socketId -> playerData), createdAt }
 
-const PLAYER_HP = 3;
-
-function id() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
-}
-function code() {
-  return Math.random().toString(36).slice(2, 6).toUpperCase();
-}
-function send(ws, o) {
-  if (ws.readyState === 1) ws.send(JSON.stringify(o));
-}
-function broadcast(room, o) {
-  room.clients.forEach(ws => send(ws, o));
+function safeRoomId(s) {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, 24);
 }
 
-function makeRoom(code) {
+function clamp(n, a, b) {
+  return Math.max(a, Math.min(b, n));
+}
+
+function defaultPlayer() {
   return {
-    code,
-    clients: new Map(),
-    host: null,
-    lobby: { started:false, players:{} },
-    game: null
+    name: "Player",
+    x: 120,
+    y: 260,
+    vx: 0,
+    vy: 0,
+    r: 16,
+    t: Date.now()
   };
 }
 
-/* ---------- MAPS ---------- */
+io.on("connection", (socket) => {
+  socket.data.roomId = null;
 
-function raceMap() {
-  return {
-    walls: [
-      {x:20,y:20,w:920,h:16},{x:20,y:504,w:920,h:16},
-      {x:20,y:20,w:16,h:500},{x:924,y:20,w:16,h:500},
-
-      {x:160,y:40,w:24,h:460},
-      {x:340,y:40,w:24,h:360},
-      {x:520,y:140,w:24,h:360},
-      {x:700,y:40,w:24,h:360},
-
-      {x:60,y:120,w:260,h:24},
-      {x:240,y:260,w:260,h:24},
-      {x:420,y:180,w:260,h:24},
-      {x:420,y:360,w:260,h:24}
-    ],
-    finish:{x:780,y:420,w:120,h:80}
-  };
-}
-
-function bossMap() {
-  return {
-    walls:[
-      {x:20,y:20,w:920,h:16},{x:20,y:504,w:920,h:16},
-      {x:20,y:20,w:16,h:500},{x:924,y:20,w:16,h:500},
-      {x:300,y:120,w:360,h:24},
-      {x:300,y:396,w:360,h:24}
-    ]
-  };
-}
-
-/* ---------- GAME ---------- */
-
-function makeGame(players) {
-  const order = Object.keys(players);
-  const game = {
-    mode: "race",
-    turn: 0,
-    bossTurnCounter: 0,
-    order,
-    players:{},
-    boss:null,
-    map:null
-  };
-
-  let y = 260;
-  for (const pid of order) {
-    game.players[pid] = {
-      id:pid,
-      name:players[pid].name,
-      x:80,y,
-      vx:0,vy:0,
-      r:18,
-      hp:PLAYER_HP,
-      color:players[pid].color
-    };
-    y+=50;
-  }
-
-  game.map = raceMap();
-  return game;
-}
-
-function startBoss(game) {
-  game.mode = "boss";
-  game.map = bossMap();
-  game.boss = {
-    hp:5,
-    x:600,y:260,r:40
-  };
-  game.bossTurnCounter = 0;
-}
-
-/* ---------- SOCKET ---------- */
-
-wss.on("connection", ws=>{
-  ws.room=null; ws.player=null;
-
-  ws.on("message", buf=>{
-    let m; try{m=JSON.parse(buf)}catch{return};
-
-    if(m.t==="create"){
-      const c=code();
-      const r=makeRoom(c);
-      rooms.set(c,r);
-      send(ws,{t:"created",code:c});
-      return;
+  socket.on("create_room", ({ roomId, name }) => {
+    const rid = safeRoomId(roomId) || ("room_" + Math.random().toString(16).slice(2, 8));
+    if (!rooms.has(rid)) {
+      rooms.set(rid, { players: new Map(), createdAt: Date.now() });
     }
-
-    if(m.t==="join"){
-      const c=m.code.toUpperCase();
-      if(!rooms.has(c)) rooms.set(c,makeRoom(c));
-      const r=rooms.get(c);
-
-      const pid=id();
-      const player={
-        id:pid,
-        name:m.name||"Player",
-        ready:false,
-        color:`hsl(${Math.random()*360},70%,60%)`
-      };
-
-      r.clients.set(ws,player);
-      r.lobby.players[pid]=player;
-      if(!r.host) r.host=pid;
-
-      ws.room=r; ws.player=player;
-      broadcast(r,{t:"lobby",room:r});
-      return;
-    }
-
-    if(!ws.room) return;
-    const r=ws.room;
-    const p=ws.player;
-
-    if(m.t==="ready"){
-      p.ready=m.v;
-      broadcast(r,{t:"lobby",room:r});
-    }
-
-    if(m.t==="start"){
-      if(p.id!==r.host) return;
-      if(!Object.values(r.lobby.players).every(x=>x.ready)) return;
-      r.lobby.started=true;
-      r.game=makeGame(r.lobby.players);
-      broadcast(r,{t:"game",game:r.game});
-    }
-
-    if(m.t==="flick"){
-      const g=r.game;
-      if(!g) return;
-      if(g.order[g.turn]!==p.id) return;
-
-      const pl=g.players[p.id];
-      pl.vx=m.vx; pl.vy=m.vy;
-
-      g.turn=(g.turn+1)%g.order.length;
-      g.bossTurnCounter++;
-
-      if(g.mode==="race" && pl.x>750){
-        startBoss(g);
-      }
-
-      if(g.mode==="boss" && g.bossTurnCounter===2){
-        g.bossTurnCounter=0;
-        const target=g.players[g.order[g.turn]];
-        target.hp--;
-        if(target.hp<=0){
-          target.hp=PLAYER_HP;
-          target.x=80; target.y=260;
-        }
-      }
-
-      broadcast(r,{t:"game",game:g});
-    }
+    socket.emit("room_created", { roomId: rid });
+    // Auto join after create
+    joinRoom(socket, rid, name);
   });
 
-  ws.on("close",()=>{
-    if(!ws.room) return;
-    ws.room.clients.delete(ws);
-    delete ws.room.lobby.players[ws.player.id];
-    broadcast(ws.room,{t:"lobby",room:ws.room});
+  socket.on("join_room", ({ roomId, name }) => {
+    const rid = safeRoomId(roomId);
+    if (!rid) {
+      socket.emit("join_error", { message: "Invalid room name." });
+      return;
+    }
+    if (!rooms.has(rid)) {
+      rooms.set(rid, { players: new Map(), createdAt: Date.now() });
+    }
+    joinRoom(socket, rid, name);
+  });
+
+  socket.on("leave_room", () => {
+    leaveRoom(socket);
+  });
+
+  socket.on("player_state", (state) => {
+    const rid = socket.data.roomId;
+    if (!rid) return;
+    const room = rooms.get(rid);
+    if (!room) return;
+
+    const p = room.players.get(socket.id);
+    if (!p) return;
+
+    // Only accept reasonable values
+    p.x = clamp(Number(state.x) || p.x, 0, 2000);
+    p.y = clamp(Number(state.y) || p.y, 0, 2000);
+    p.vx = clamp(Number(state.vx) || 0, -2000, 2000);
+    p.vy = clamp(Number(state.vy) || 0, -2000, 2000);
+    p.t = Date.now();
+
+    // Broadcast to others in room
+    socket.to(rid).emit("player_state", { id: socket.id, ...p });
+  });
+
+  socket.on("disconnect", () => {
+    leaveRoom(socket);
   });
 });
 
-server.listen(3000,()=>console.log("Running on 3000"));
+function joinRoom(socket, rid, name) {
+  leaveRoom(socket);
+
+  const room = rooms.get(rid);
+  if (!room) return;
+
+  socket.join(rid);
+  socket.data.roomId = rid;
+
+  const p = defaultPlayer();
+  p.name = String(name || "Player").trim().slice(0, 18) || "Player";
+  room.players.set(socket.id, p);
+
+  // Send current room snapshot to the joiner
+  const snapshot = [];
+  for (const [id, data] of room.players.entries()) {
+    snapshot.push({ id, ...data });
+  }
+  socket.emit("room_joined", { roomId: rid, you: socket.id, players: snapshot });
+
+  // Notify others
+  socket.to(rid).emit("player_joined", { id: socket.id, ...p });
+}
+
+function leaveRoom(socket) {
+  const rid = socket.data.roomId;
+  if (!rid) return;
+
+  const room = rooms.get(rid);
+  if (room) {
+    room.players.delete(socket.id);
+    socket.to(rid).emit("player_left", { id: socket.id });
+
+    // Cleanup empty rooms
+    if (room.players.size === 0) rooms.delete(rid);
+  }
+  socket.leave(rid);
+  socket.data.roomId = null;
+}
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
