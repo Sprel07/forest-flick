@@ -1,102 +1,1038 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Forest Flick</title>
-<style>
-body{margin:0;background:#070b18;color:white;font-family:sans-serif}
-button{padding:8px;margin:4px}
-canvas{display:block;margin:auto;background:#0d1533;border-radius:12px}
-#menu,#lobby,#hud{text-align:center}
-.hidden{display:none}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Forest Flick</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #060814; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    .topbar {
+      position: fixed; top: 10px; left: 0; right: 0;
+      display: flex; justify-content: center; z-index: 10;
+      pointer-events: none;
+    }
+    .topbarInner {
+      pointer-events: auto;
+      display: flex; gap: 10px; align-items: center;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 10px;
+      padding: 8px 10px;
+      backdrop-filter: blur(8px);
+    }
+    input {
+      width: 160px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.20);
+      color: rgba(255,255,255,0.92);
+      outline: none;
+      font-size: 13px;
+    }
+    button {
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.92);
+      font-weight: 800;
+      font-size: 13px;
+    }
+    button:hover { background: rgba(255,255,255,0.16); }
+    .wrap { display: grid; place-items: center; height: 100%; padding-top: 56px; box-sizing: border-box; }
+    canvas {
+      width: min(92vw, 980px);
+      height: min(76vh, 600px);
+      background: radial-gradient(1200px 700px at 20% 20%, #172046, #070a14);
+      border-radius: 18px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.55);
+      touch-action: none;
+    }
+    .hud {
+      position: fixed; left: 16px; top: 70px;
+      color: rgba(255,255,255,0.92);
+      font-size: 13px; line-height: 1.35; user-select: none;
+      background: rgba(0,0,0,0.25);
+      padding: 10px 12px;
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+      max-width: 420px;
+      z-index: 9;
+    }
+    .hud b { font-weight: 900; }
+    .hud .small { opacity: 0.85; font-size: 12px; margin-top: 6px; }
+
+    .toast {
+      position: fixed; right: 16px; top: 70px;
+      color: rgba(255,255,255,0.95);
+      background: rgba(0,0,0,0.35);
+      padding: 10px 12px;
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+      font-size: 13px;
+      max-width: 520px;
+      z-index: 9;
+      display: none;
+    }
+  </style>
 </head>
 <body>
+  <div class="topbar">
+    <div class="topbarInner">
+      <input id="nameInp" placeholder="Your name" maxlength="18" />
+      <input id="roomInp" placeholder="Room" maxlength="24" />
+      <button id="joinBtn">Join</button>
+      <button id="createBtn">Create</button>
+    </div>
+  </div>
 
-<div id="menu">
-  <input id="name" placeholder="Your name">
-  <input id="code" placeholder="Room">
-  <button onclick="join()">Join</button>
-  <button onclick="create()">Create</button>
-</div>
+  <div class="wrap">
+    <canvas id="c" width="980" height="600"></canvas>
+  </div>
 
-<div id="lobby" class="hidden">
-  <div id="players"></div>
-  <button onclick="ready()">Ready</button>
-  <button onclick="start()">Start</button>
-</div>
+  <div class="hud" id="hud"></div>
+  <div class="toast" id="toast"></div>
 
-<canvas id="c" width="960" height="540"></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+  (() => {
+    // UI
+    const nameInp = document.getElementById("nameInp");
+    const roomInp = document.getElementById("roomInp");
+    const joinBtn = document.getElementById("joinBtn");
+    const createBtn = document.getElementById("createBtn");
 
-<script>
-const ws=new WebSocket(`ws://${location.host}`);
-const ctx=c.getContext("2d");
-let game=null;
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const hud = document.getElementById("hud");
+    const toast = document.getElementById("toast");
 
-ws.onmessage=e=>{
-  const m=JSON.parse(e.data);
+    const W = canvas.width;
+    const H = canvas.height;
 
-  if(m.t==="created"){ code.value=m.code }
+    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+    function norm(x,y){
+      const l = Math.hypot(x,y);
+      return l > 0 ? {x:x/l, y:y/l, l} : {x:0, y:0, l:0};
+    }
+    function rnd(a,b){ return a + Math.random()*(b-a); }
 
-  if(m.t==="lobby"){
-    menu.classList.add("hidden");
-    lobby.classList.remove("hidden");
-    players.innerHTML=Object.values(m.room.lobby.players)
-      .map(p=>`${p.name} ${p.ready?"✔":""}`).join("<br>");
-  }
+    function showToast(msg, ms=1600){
+      toast.textContent = msg;
+      toast.style.display = "block";
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.style.display = "none", ms);
+    }
 
-  if(m.t==="game"){
-    lobby.classList.add("hidden");
-    game=m.game;
-    draw();
-  }
-};
+    // Socket
+    const socket = window.io ? window.io() : null;
+    let connected = false;
+    let myId = null;
+    let roomId = null;
 
-function create(){ ws.send(JSON.stringify({t:"create"})) }
-function join(){
-  ws.send(JSON.stringify({t:"join",code:code.value,name:name.value}))
-}
-function ready(){ ws.send(JSON.stringify({t:"ready",v:true})) }
-function start(){ ws.send(JSON.stringify({t:"start"})) }
+    // Other players (simple)
+    const others = new Map(); // id -> {name,x,y,vx,vy,r,t,rx,ry}
+    function upsertOther(p){
+      if (!p || !p.id) return;
+      if (p.id === myId) return;
+      const ex = others.get(p.id) || { rx: p.x, ry: p.y };
+      ex.name = p.name || ex.name || "Player";
+      ex.x = p.x ?? ex.x ?? 0;
+      ex.y = p.y ?? ex.y ?? 0;
+      ex.vx = p.vx ?? 0;
+      ex.vy = p.vy ?? 0;
+      ex.r = p.r ?? 16;
+      ex.t = p.t ?? Date.now();
+      if (typeof ex.rx !== "number") ex.rx = ex.x;
+      if (typeof ex.ry !== "number") ex.ry = ex.y;
+      others.set(p.id, ex);
+    }
 
-let drag=false,sx,sy;
-c.onmousedown=e=>{drag=true;sx=e.offsetX;sy=e.offsetY};
-c.onmouseup=e=>{
-  if(!drag)return;drag=false;
-  ws.send(JSON.stringify({
-    t:"flick",
-    vx:(sx-e.offsetX)*3,
-    vy:(sy-e.offsetY)*3
-  }));
-};
+    if (socket) {
+      socket.on("connect", () => {
+        connected = true;
+        showToast("Connected.");
+      });
 
-function draw(){
-  ctx.clearRect(0,0,960,540);
-  if(!game) return;
+      socket.on("disconnect", () => {
+        connected = false;
+        myId = null;
+        roomId = null;
+        others.clear();
+        showToast("Disconnected.");
+      });
 
-  ctx.fillStyle="#345";
-  game.map.walls.forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
+      socket.on("room_created", (d) => {
+        if (d && d.roomId) roomInp.value = d.roomId;
+      });
 
-  if(game.map.finish){
-    ctx.fillStyle="#2f6";
-    ctx.fillRect(game.map.finish.x,game.map.finish.y,game.map.finish.w,game.map.finish.h);
-  }
+      socket.on("room_joined", (d) => {
+        roomId = d.roomId;
+        myId = d.you;
+        others.clear();
+        if (Array.isArray(d.players)) {
+          for (const p of d.players) upsertOther(p);
+        }
+        showToast("Joined room: " + roomId);
+      });
 
-  if(game.boss){
-    ctx.beginPath();
-    ctx.arc(game.boss.x,game.boss.y,game.boss.r,0,Math.PI*2);
-    ctx.fillStyle="#f44";
-    ctx.fill();
-  }
+      socket.on("join_error", (d) => {
+        showToast(d?.message || "Join error");
+      });
 
-  Object.values(game.players).forEach(p=>{
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-    ctx.fillStyle=p.color;
-    ctx.fill();
-    ctx.fillText(`${p.name} (${p.hp})`,p.x-15,p.y-22);
-  });
-}
-</script>
+      socket.on("player_joined", (p) => {
+        upsertOther(p);
+        showToast((p?.name || "Player") + " joined.");
+      });
+
+      socket.on("player_left", (p) => {
+        if (p && p.id) others.delete(p.id);
+      });
+
+      socket.on("player_state", (p) => {
+        upsertOther(p);
+      });
+    }
+
+    function safeRoom(s){
+      return String(s || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 24);
+    }
+
+    joinBtn.onclick = () => {
+      if (!socket) { showToast("Socket not available."); return; }
+      const name = (nameInp.value || "Player").trim().slice(0, 18) || "Player";
+      const rid = safeRoom(roomInp.value);
+      if (!rid) { showToast("Enter a room."); return; }
+      socket.emit("join_room", { roomId: rid, name });
+    };
+
+    createBtn.onclick = () => {
+      if (!socket) { showToast("Socket not available."); return; }
+      const name = (nameInp.value || "Player").trim().slice(0, 18) || "Player";
+      const rid = safeRoom(roomInp.value);
+      socket.emit("create_room", { roomId: rid, name });
+    };
+
+    // Game tuning
+    const MAX_PULL = 170;
+    const FORCE_SCALE = 0.11;
+    const LAUNCH_MULT = 95;
+
+    // Faster regain control
+    const CONTROL_EPS = 18;
+    const BASE_FRICTION = 0.990;
+    const WALL_IMPACT_DAMP = 0.80;
+    const BASE_BOUNCE_KEEP = 0.94;
+    const SPEED_CAP = 420;
+
+    // Powerups
+    const DASH_SPEED = 260;
+    const MAGNET_RADIUS = 140;
+    const MAGNET_STRENGTH = 1.4;
+    const MAGNET_DURATION = 6.0;
+
+    // Boss testing
+    const BOSS_AFTER_ROUNDS = 1;
+
+    // Camera shake
+    let shakeTime = 0;
+    let shakeMag = 0;
+    function addShake(mag, t){
+      shakeMag = Math.max(shakeMag, mag);
+      shakeTime = Math.max(shakeTime, t);
+    }
+
+    // World
+    let walls = [];
+    let collectibles = [];
+    let finish = null;
+    let powerups = [];
+    let pads = [];
+    let traps = [];
+
+    let score = 0;
+    let launches = 0;
+    let won = false;
+
+    // Boss state
+    let inBoss = false;
+    let roundsCleared = 0;
+
+    const BOSSES = [
+      {
+        id: "boulder",
+        name: "Moko Boulder Idol",
+        weakness: "BOULDER",
+        hint: "Only the boulder can damage it. Flick yourself into the boulder to launch it.",
+        hp: 7
+      },
+      {
+        id: "dash",
+        name: "Armored Crab King",
+        weakness: "DASH",
+        hint: "Only dash strikes hurt it. Tap while moving to dash into it.",
+        hp: 8
+      },
+      {
+        id: "parry",
+        name: "Spirit Owl Warden",
+        weakness: "PARRY",
+        hint: "Parry the shockwave. Dash through the ring edge as it expands to reflect damage.",
+        hp: 6
+      }
+    ];
+
+    let boss = null;
+    let bossBoulder = null;
+    let bossRing = null;
+
+    function baseBounds(){
+      return [
+        {x: 30, y: 30, w: W-60, h: 12},
+        {x: 30, y: H-42, w: W-60, h: 12},
+        {x: 30, y: 30, w: 12, h: H-60},
+        {x: W-42, y: 30, w: 12, h: H-60}
+      ];
+    }
+
+    function placePowerup(type, x, y) {
+      powerups.push({ type, x, y, r: 12, taken: false });
+    }
+
+    // Player
+    const player = {
+      name: "You",
+      x: 120, y: H/2,
+      vx: 0, vy: 0,
+      r: 16,
+      dashCharges: 1,
+      magnetTime: 0,
+      shield: false,
+      dashStrikeTimer: 0,
+      firstLaunchBoost: 1.0,
+      firstLaunchAvailable: true,
+      bounceKeep: BASE_BOUNCE_KEEP
+    };
+
+    let checkpoint = { x: player.x, y: player.y };
+
+    function isStopped(){
+      return Math.hypot(player.vx, player.vy) < CONTROL_EPS;
+    }
+
+    function resetPlayer(){
+      player.x = checkpoint.x;
+      player.y = checkpoint.y;
+      player.vx = 0;
+      player.vy = 0;
+    }
+
+    function circleRectCollide(cx, cy, cr, rx, ry, rw, rh) {
+      const nx = clamp(cx, rx, rx + rw);
+      const ny = clamp(cy, ry, ry + rh);
+      const dx = cx - nx;
+      const dy = cy - ny;
+      return (dx*dx + dy*dy) <= cr*cr;
+    }
+
+    function resolveCircleRect(cx, cy, cr, rx, ry, rw, rh, vx, vy) {
+      const nx = clamp(cx, rx, rx + rw);
+      const ny = clamp(cy, ry, ry + rh);
+      let dx = cx - nx;
+      let dy = cy - ny;
+
+      const dist = Math.hypot(dx, dy);
+      if (dist === 0) {
+        const n = norm(-vx || 0, -vy || 1);
+        dx = n.x; dy = n.y;
+      }
+
+      const nrm = norm(dx, dy);
+      const overlap = cr - (dist || 0);
+
+      if (overlap > 0) {
+        cx += nrm.x * overlap;
+        cy += nrm.y * overlap;
+
+        const dot = vx*nrm.x + vy*nrm.y;
+        vx = vx - 2*dot*nrm.x;
+        vy = vy - 2*dot*nrm.y;
+
+        vx *= player.bounceKeep;
+        vy *= player.bounceKeep;
+      }
+      return {cx, cy, vx, vy};
+    }
+
+    // Input
+    let pointerDown = false;
+    let dragStart = {x:0, y:0};
+    let dragNow = {x:0, y:0};
+    let dragging = false;
+
+    function getPos(e){
+      const rect = canvas.getBoundingClientRect();
+      const cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
+      const cy = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (cx - rect.left) * (canvas.width / rect.width),
+        y: (cy - rect.top) * (canvas.height / rect.height)
+      };
+    }
+
+    function tryUseDash(){
+      if (won) return false;
+      if (player.dashCharges <= 0) return false;
+      const sp = Math.hypot(player.vx, player.vy);
+      if (sp < 0.6) return false;
+
+      const d = norm(player.vx, player.vy);
+      player.vx += d.x * DASH_SPEED;
+      player.vy += d.y * DASH_SPEED;
+      player.dashCharges -= 1;
+      player.dashStrikeTimer = 0.18;
+      showToast("Dash!");
+      return true;
+    }
+
+    function pointerDownHandler(e){
+      e.preventDefault();
+      const p = getPos(e);
+      pointerDown = true;
+      dragStart = p;
+      dragNow = p;
+
+      // Tap while moving uses dash and can parry
+      if (!isStopped()) {
+        const didDash = tryUseDash();
+        if (didDash && inBoss && boss && boss.weakness === "PARRY" && bossRing && bossRing.active) {
+          const dx = player.x - bossRing.x;
+          const dy = player.y - bossRing.y;
+          const dist = Math.hypot(dx, dy);
+          const within = Math.abs(dist - bossRing.r) < 22;
+          if (within) {
+            bossTakeDamage(1, "PARRY");
+            bossRing.active = false;
+            addShake(14, 0.20);
+            showToast("Parry!");
+          }
+        }
+        dragging = false;
+        return;
+      }
+
+      const d = Math.hypot(p.x - player.x, p.y - player.y);
+      dragging = isStopped() && d <= player.r + 12;
+    }
+
+    function pointerMoveHandler(e){
+      if (!pointerDown) return;
+      dragNow = getPos(e);
+    }
+
+    function pointerUpHandler(){
+      if (!pointerDown) return;
+      pointerDown = false;
+
+      if (!dragging || won) { dragging = false; return; }
+
+      const dx = dragStart.x - dragNow.x;
+      const dy = dragStart.y - dragNow.y;
+      const n = norm(dx, dy);
+      const pull = clamp(n.l, 0, MAX_PULL);
+
+      if (pull > 6) {
+        let power = pull * FORCE_SCALE;
+        if (player.firstLaunchAvailable) {
+          power *= player.firstLaunchBoost;
+          player.firstLaunchAvailable = false;
+        }
+        player.vx = n.x * power * LAUNCH_MULT;
+        player.vy = n.y * power * LAUNCH_MULT;
+        launches += 1;
+      }
+      dragging = false;
+    }
+
+    canvas.addEventListener("mousedown", pointerDownHandler);
+    canvas.addEventListener("mousemove", pointerMoveHandler);
+    window.addEventListener("mouseup", pointerUpHandler);
+
+    canvas.addEventListener("touchstart", pointerDownHandler, {passive:false});
+    canvas.addEventListener("touchmove", pointerMoveHandler, {passive:false});
+    window.addEventListener("touchend", pointerUpHandler, {passive:false});
+
+    window.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "r") restartStage();
+      if (k === "n") continueStage();
+    });
+
+    // Stages
+    function newNormalLevel(){
+      inBoss = false;
+      boss = null;
+      bossBoulder = null;
+      bossRing = null;
+
+      won = false;
+      score = 0;
+      launches = 0;
+      player.dashCharges = 1;
+      player.magnetTime = 0;
+      player.dashStrikeTimer = 0;
+      player.firstLaunchAvailable = true;
+
+      walls = baseBounds();
+      walls.push({x: 220, y: 140, w: 260, h: 24});
+      walls.push({x: 300, y: 340, w: 330, h: 24});
+      walls.push({x: 610, y: 180, w: 24, h: 220});
+
+      finish = { x: W - 170, y: 110, w: 110, h: 75 };
+
+      collectibles = [];
+      for (let i=0;i<6;i++){
+        collectibles.push({ x: rnd(150, W-180), y: rnd(90, H-90), r: 10, taken: false, value: 25 });
+      }
+
+      traps = [{x: 460, y: 260, r: 14}];
+
+      pads = [{x: 120, y: 260, w: 120, h: 16}, {x: 720, y: 440, w: 140, h: 16}];
+
+      powerups = [];
+      placePowerup("dash", 650, 100);
+      placePowerup("magnet", 260, 430);
+
+      player.x = 120;
+      player.y = H/2;
+      player.vx = 0;
+      player.vy = 0;
+      checkpoint = { x: player.x, y: player.y };
+
+      showToast("Normal level. Clear it to spawn a boss (testing).");
+    }
+
+    function pickBoss(){
+      return BOSSES[Math.floor(Math.random() * BOSSES.length)];
+    }
+
+    function newBossArena(){
+      inBoss = true;
+      const b = pickBoss();
+      boss = {
+        id: b.id,
+        name: b.name,
+        weakness: b.weakness,
+        hint: b.hint,
+        hp: b.hp,
+        hpMax: b.hp,
+        x: W * 0.72,
+        y: H * 0.50,
+        r: 44,
+        moveT: 0
+      };
+
+      won = false;
+      score = 0;
+      launches = 0;
+      player.dashCharges = (boss.weakness === "DASH" || boss.weakness === "PARRY") ? 2 : 1;
+      player.magnetTime = 0;
+      player.dashStrikeTimer = 0;
+      player.firstLaunchAvailable = true;
+
+      walls = baseBounds();
+      walls.push({x: 220, y: 90, w: 24, h: 340});
+      walls.push({x: 340, y: 150, w: 260, h: 24});
+      walls.push({x: 340, y: 346, w: 260, h: 24});
+      walls.push({x: 600, y: 150, w: 24, h: 220});
+
+      finish = null;
+
+      collectibles = [];
+      for (let i=0;i<6;i++){
+        collectibles.push({ x: rnd(160, W-200), y: rnd(90, H-90), r: 10, taken: false, value: 15 });
+      }
+
+      traps = [];
+      pads = [{x: 120, y: 260, w: 120, h: 16}, {x: 740, y: 260, w: 140, h: 16}];
+
+      powerups = [];
+      if (boss.weakness === "DASH") placePowerup("dash", 320, 110);
+      if (boss.weakness === "PARRY") placePowerup("dash", 320, 260);
+      if (boss.weakness === "BOULDER") placePowerup("shield", 320, 260);
+
+      bossBoulder = null;
+      if (boss.weakness === "BOULDER") {
+        bossBoulder = { x: W*0.42, y: H*0.50, vx: 0, vy: 0, r: 22 };
+      }
+
+      bossRing = null;
+      if (boss.weakness === "PARRY") {
+        bossRing = { x: boss.x, y: boss.y, r: 10, spd: 220, active: false, cd: 1.2 };
+      }
+
+      player.x = 120;
+      player.y = H/2;
+      player.vx = 0;
+      player.vy = 0;
+      checkpoint = { x: player.x, y: player.y };
+
+      showToast(boss.name + " appeared. " + boss.hint, 2600);
+    }
+
+    function restartStage(){
+      if (inBoss) newBossArena();
+      else newNormalLevel();
+    }
+
+    function continueStage(){
+      if (!won) return;
+
+      won = false;
+      if (!inBoss) {
+        roundsCleared += 1;
+        if (roundsCleared >= BOSS_AFTER_ROUNDS) {
+          roundsCleared = 0;
+          newBossArena();
+        } else {
+          newNormalLevel();
+        }
+        return;
+      }
+
+      // After boss, go back to normal level
+      newNormalLevel();
+    }
+
+    // Boss damage
+    function bossTakeDamage(amount, source){
+      if (!boss) return;
+
+      if (boss.weakness === "BOULDER" && source !== "BOULDER") return;
+      if (boss.weakness === "DASH" && source !== "DASH") return;
+      if (boss.weakness === "PARRY" && source !== "PARRY") return;
+
+      boss.hp = Math.max(0, boss.hp - amount);
+      addShake(12, 0.18);
+      showToast("Boss hit!");
+
+      if (boss.hp <= 0) {
+        won = true;
+        addShake(18, 0.25);
+        showToast("Boss defeated. Press N.", 2200);
+      }
+    }
+
+    // Update loop
+    function update(dt){
+      if (shakeTime > 0) shakeTime = Math.max(0, shakeTime - dt);
+      if (player.magnetTime > 0) player.magnetTime = Math.max(0, player.magnetTime - dt);
+      if (player.dashStrikeTimer > 0) player.dashStrikeTimer = Math.max(0, player.dashStrikeTimer - dt);
+
+      if (!won) {
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+
+        player.vx *= BASE_FRICTION;
+        player.vy *= BASE_FRICTION;
+
+        const sp = Math.hypot(player.vx, player.vy);
+        if (sp > SPEED_CAP) {
+          const n = norm(player.vx, player.vy);
+          player.vx = n.x * SPEED_CAP;
+          player.vy = n.y * SPEED_CAP;
+        }
+
+        // Walls collisions (also damp so you regain control faster)
+        for (const w of walls) {
+          if (circleRectCollide(player.x, player.y, player.r, w.x, w.y, w.w, w.h)) {
+            const res = resolveCircleRect(player.x, player.y, player.r, w.x, w.y, w.w, w.h, player.vx, player.vy);
+            player.x = res.cx; player.y = res.cy;
+            player.vx = res.vx * WALL_IMPACT_DAMP;
+            player.vy = res.vy * WALL_IMPACT_DAMP;
+          }
+        }
+
+        // Collectibles
+        for (const c of collectibles) {
+          if (c.taken) continue;
+          const d = Math.hypot(player.x - c.x, player.y - c.y);
+          if (d <= player.r + c.r) {
+            c.taken = true;
+            score += c.value;
+            checkpoint = { x: player.x, y: player.y };
+          }
+        }
+
+        // Powerups
+        for (const p of powerups) {
+          if (p.taken) continue;
+          const d = Math.hypot(player.x - p.x, player.y - p.y);
+          if (d <= player.r + p.r) {
+            p.taken = true;
+            if (p.type === "dash") { player.dashCharges += 1; showToast("Dash orb."); }
+            if (p.type === "magnet") { player.magnetTime = MAGNET_DURATION; showToast("Magnet 6s."); }
+            if (p.type === "shield") { player.shield = true; showToast("Shield."); }
+          }
+        }
+
+        // Boss movement and boss mechanics
+        if (inBoss && boss) {
+          boss.moveT += dt;
+          boss.x = W*0.72 + Math.sin(boss.moveT*1.1) * 70;
+          boss.y = H*0.50 + Math.cos(boss.moveT*0.9) * 70;
+
+          // Dash boss: dash strike into boss
+          const db = Math.hypot(player.x - boss.x, player.y - boss.y);
+          if (db <= player.r + boss.r) {
+            const n = norm(player.x - boss.x, player.y - boss.y);
+            player.vx += n.x * 120;
+            player.vy += n.y * 120;
+
+            if (boss.weakness === "DASH" && player.dashStrikeTimer > 0) {
+              bossTakeDamage(1, "DASH");
+              player.dashStrikeTimer = 0;
+              addShake(14, 0.20);
+            }
+          }
+
+          // Parry boss ring
+          if (boss.weakness === "PARRY" && bossRing) {
+            bossRing.cd -= dt;
+            if (!bossRing.active && bossRing.cd <= 0) {
+              bossRing.active = true;
+              bossRing.x = boss.x;
+              bossRing.y = boss.y;
+              bossRing.r = 10;
+              bossRing.cd = 2.1;
+              showToast("Shockwave!");
+            }
+            if (bossRing.active) {
+              bossRing.r += bossRing.spd * dt;
+              if (bossRing.r > 520) bossRing.active = false;
+
+              // If player touches ring without parry, reset
+              const dx = player.x - bossRing.x;
+              const dy = player.y - bossRing.y;
+              const dist = Math.hypot(dx, dy);
+              const hitRing = Math.abs(dist - bossRing.r) < 10;
+              if (hitRing && player.dashStrikeTimer <= 0) {
+                if (player.shield) {
+                  player.shield = false;
+                  showToast("Shield saved you.");
+                } else {
+                  showToast("Shockwave hit. Reset.");
+                  resetPlayer();
+                }
+              }
+            }
+          }
+
+          // Boulder boss
+          if (boss.weakness === "BOULDER" && bossBoulder) {
+            bossBoulder.x += bossBoulder.vx * dt;
+            bossBoulder.y += bossBoulder.vy * dt;
+            bossBoulder.vx *= 0.992;
+            bossBoulder.vy *= 0.992;
+
+            for (const w of walls) {
+              if (circleRectCollide(bossBoulder.x, bossBoulder.y, bossBoulder.r, w.x, w.y, w.w, w.h)) {
+                const res = resolveCircleRect(bossBoulder.x, bossBoulder.y, bossBoulder.r, w.x, w.y, w.w, w.h, bossBoulder.vx, bossBoulder.vy);
+                bossBoulder.x = res.cx; bossBoulder.y = res.cy;
+                bossBoulder.vx = res.vx * 0.92;
+                bossBoulder.vy = res.vy * 0.92;
+              }
+            }
+
+            // Player pushes boulder
+            const dp = Math.hypot(player.x - bossBoulder.x, player.y - bossBoulder.y);
+            if (dp <= player.r + bossBoulder.r) {
+              const n = norm(bossBoulder.x - player.x, bossBoulder.y - player.y);
+              const push = clamp(Math.hypot(player.vx, player.vy), 80, 360);
+              bossBoulder.vx += n.x * push * 0.85;
+              bossBoulder.vy += n.y * push * 0.85;
+              addShake(6, 0.10);
+            }
+
+            // Boulder hits boss
+            const d2 = Math.hypot(boss.x - bossBoulder.x, boss.y - bossBoulder.y);
+            if (d2 <= boss.r + bossBoulder.r) {
+              const sp2 = Math.hypot(bossBoulder.vx, bossBoulder.vy);
+              if (sp2 > 55) {
+                bossTakeDamage(1, "BOULDER");
+                bossBoulder.vx *= 0.55;
+                bossBoulder.vy *= 0.55;
+                addShake(16, 0.20);
+                showToast("Boulder smash!");
+              }
+            }
+          }
+        }
+
+        // Finish (normal only)
+        if (!inBoss && finish) {
+          if (circleRectCollide(player.x, player.y, player.r, finish.x, finish.y, finish.w, finish.h)) {
+            won = true;
+            showToast("Level clear. Press N.", 2200);
+          }
+        }
+      }
+
+      // Multiplayer send (20 fps)
+      sendTimer -= dt;
+      if (sendTimer <= 0) {
+        sendTimer = 0.05;
+        if (socket && connected && roomId) {
+          socket.emit("player_state", {
+            x: player.x, y: player.y, vx: player.vx, vy: player.vy
+          });
+        }
+      }
+
+      // Smooth other players
+      for (const [id, p] of others) {
+        const dx = p.x - p.rx;
+        const dy = p.y - p.ry;
+        p.rx += dx * 0.18;
+        p.ry += dy * 0.18;
+      }
+    }
+
+    // Draw
+    function drawGlowCircle(x,y,r,color){
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(x,y,r,0,Math.PI*2);
+      ctx.fill();
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+
+      ctx.save();
+      if (shakeTime > 0) {
+        const t = shakeTime / 0.25;
+        const mag = shakeMag * (0.4 + 0.6 * t);
+        ctx.translate((Math.random()*2-1)*mag, (Math.random()*2-1)*mag);
+      }
+
+      // Walls
+      for (const w of walls) {
+        ctx.fillStyle = "rgba(255,255,255,0.10)";
+        ctx.fillRect(w.x, w.y, w.w, w.h);
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.strokeRect(w.x + 0.5, w.y + 0.5, w.w - 1, w.h - 1);
+      }
+
+      // Pads
+      for (const p of pads) {
+        ctx.fillStyle = "rgba(92,200,255,0.25)";
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.strokeStyle = "rgba(92,200,255,0.55)";
+        ctx.strokeRect(p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1);
+        ctx.fillStyle = "rgba(255,255,255,0.65)";
+        ctx.font = "10px system-ui";
+        ctx.fillText("BOOST", p.x + 8, p.y + 12);
+      }
+
+      // Finish
+      if (!inBoss && finish) {
+        ctx.fillStyle = "rgba(124,242,255,0.24)";
+        ctx.fillRect(finish.x - 6, finish.y - 6, finish.w + 12, finish.h + 12);
+        ctx.fillStyle = "rgba(124,242,255,0.10)";
+        ctx.fillRect(finish.x, finish.y, finish.w, finish.h);
+        ctx.strokeStyle = "#7cf2ff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(finish.x + 0.5, finish.y + 0.5, finish.w - 1, finish.h - 1);
+        ctx.fillStyle = "rgba(255,255,255,0.80)";
+        ctx.font = "800 12px system-ui";
+        ctx.fillText("FINISH", finish.x + 22, finish.y + 40);
+      }
+
+      // Collectibles
+      for (const c of collectibles) {
+        if (c.taken) continue;
+        drawGlowCircle(c.x, c.y, c.r + 10, "rgba(255,211,106,0.25)");
+        ctx.beginPath();
+        ctx.fillStyle = "#ffd36a";
+        ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // Powerups
+      for (const p of powerups) {
+        if (p.taken) continue;
+        let col = "#5cc8ff", glow = "rgba(92,200,255,0.25)", label = "D";
+        if (p.type === "magnet") { col = "#c56bff"; glow = "rgba(197,107,255,0.22)"; label = "M"; }
+        if (p.type === "shield") { col = "#76ff8a"; glow = "rgba(118,255,138,0.20)"; label = "S"; }
+
+        drawGlowCircle(p.x, p.y, p.r + 12, glow);
+        ctx.beginPath();
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2;
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.88)";
+        ctx.font = "900 12px system-ui";
+        ctx.fillText(label, p.x - 4, p.y + 4);
+      }
+
+      // Boss
+      if (inBoss && boss) {
+        drawGlowCircle(boss.x, boss.y, boss.r + 22, "rgba(255,255,255,0.10)");
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = 3;
+        ctx.arc(boss.x, boss.y, boss.r, 0, Math.PI*2);
+        ctx.stroke();
+
+        // HP bar
+        const bw = 220, bh = 10;
+        const bx = W - bw - 40, by = 46;
+        ctx.fillStyle = "rgba(255,255,255,0.16)";
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = "rgba(255,90,122,0.90)";
+        ctx.fillRect(bx, by, bw * (boss.hp / boss.hpMax), bh);
+
+        ctx.fillStyle = "rgba(255,255,255,0.88)";
+        ctx.font = "900 12px system-ui";
+        ctx.fillText(boss.name, bx, by - 8);
+      }
+
+      // Parry ring
+      if (inBoss && bossRing && bossRing.active) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(197,107,255,0.35)";
+        ctx.lineWidth = 4;
+        ctx.arc(bossRing.x, bossRing.y, bossRing.r, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(197,107,255,0.12)";
+        ctx.lineWidth = 10;
+        ctx.arc(bossRing.x, bossRing.y, bossRing.r, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      // Boulder
+      if (bossBoulder) {
+        drawGlowCircle(bossBoulder.x, bossBoulder.y, bossBoulder.r + 14, "rgba(255,211,106,0.10)");
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(255,211,106,0.85)";
+        ctx.lineWidth = 3;
+        ctx.arc(bossBoulder.x, bossBoulder.y, bossBoulder.r, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "900 10px system-ui";
+        ctx.fillText("BOULDER", bossBoulder.x - 24, bossBoulder.y + 4);
+      }
+
+      // Aim line
+      if (dragging && pointerDown && isStopped() && !won) {
+        const dx = dragStart.x - dragNow.x;
+        const dy = dragStart.y - dragNow.y;
+        const n = norm(dx, dy);
+        const pull = clamp(n.l, 0, MAX_PULL);
+
+        const endX = player.x + n.x * (pull * 1.5);
+        const endY = player.y + n.y * (pull * 1.5);
+
+        ctx.save();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(180,255,220,0.35)";
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(180,255,220,0.95)";
+        ctx.beginPath();
+        ctx.arc(endX, endY, 5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Other players
+      for (const [id, p] of others) {
+        drawGlowCircle(p.rx, p.ry, 26, "rgba(255,255,255,0.08)");
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255,255,255,0.65)";
+        ctx.arc(p.rx, p.ry, 14, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.80)";
+        ctx.font = "800 11px system-ui";
+        ctx.fillText(p.name || "Player", p.rx - 18, p.ry - 20);
+      }
+
+      // Player
+      drawGlowCircle(player.x, player.y, player.r + 16, "rgba(255,255,255,0.16)");
+      ctx.beginPath();
+      ctx.fillStyle = "#ffffff";
+      ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+      ctx.fill();
+
+      // shield ring
+      if (player.shield) {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(118,255,138,0.85)";
+        ctx.lineWidth = 2;
+        ctx.arc(player.x, player.y, player.r + 7, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      // win overlay
+      if (won) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.font = "900 34px system-ui";
+        ctx.fillText(inBoss ? "BOSS DEFEATED" : "LEVEL COMPLETE", 290, 270);
+        ctx.font = "700 16px system-ui";
+        ctx.fillStyle = "rgba(255,255,255,0.86)";
+        ctx.fillText("Press N to continue, R restart", 345, 305);
+        ctx.restore();
+      }
+
+      ctx.restore();
+
+      // HUD
+      const rem = collectibles.filter(c => !c.taken).length;
+      const dashTxt = "Dash: " + player.dashCharges + " (tap while moving)";
+      const magnetTxt = player.magnetTime > 0 ? ("Magnet: " + player.magnetTime.toFixed(1) + "s") : "Magnet: OFF";
+      const bossHint = (inBoss && boss) ? ("<br><b>Boss Hint:</b> " + boss.hint) : "";
+
+      hud.innerHTML =
+        "<b>Forest Flick</b><br>" +
+        "Room: " + (roomId || "none") + "<br>" +
+        "Players: " + (1 + others.size) + "<br>" +
+        "Stage: " + (inBoss ? "Boss Arena" : "Normal Level") + "<br>" +
+        "Score: " + score + "<br>" +
+        "Launches: " + launches + "<br>" +
+        "Items left: " + rem + "<br>" +
+        dashTxt + "<br>" +
+        magnetTxt +
+        bossHint +
+        '<div class="small">Drag from the player to aim. Release to launch. While moving: tap to dash. Keys: R, N</div>';
+    }
+
+    let sendTimer = 0.05;
+
+    // Start with a level immediately so you never get blank screen
+    newNormalLevel();
+    showToast("Game loaded. Join or Create a room anytime.");
+
+    let last = performance.now();
+    function loop(now){
+      const dt = Math.min(1/30, (now - last) / 1000);
+      last = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  })();
+  </script>
 </body>
 </html>
